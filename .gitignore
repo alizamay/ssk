@@ -1,0 +1,68 @@
+HELP.md
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**
+!**/src/test/**
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+
+### VS Code ###
+.vscode/
+
+### Compiled classes (also under src/, must stay after the !src negations) ###
+*.class
+
+### Logs, data dumps, archives ###
+logs/
+*.log
+*.csv
+*.csv.orig
+*.zip
+/cabinet_insert.sql
+/database_schema_report.txt
+
+### Secrets & environment-specific config (never commit real values) ###
+/config/*
+!/config/application.properties.example
+/newConfig/
+*.properties.recommended
+/application_properties_fix.properties
+/prod_db_prestart.sql
+
+### Local DB/import scripts (contain connection credentials) ###
+/*.js
+/*.sql
+/*.bat
+/*.ps1
+/package.json
+/package-lock.json
+node_modules/
+
+### Local tooling & scratch ###
+/attacker/
+/load-test/
+/SiteRepository_additions.java
+/SiteService_*.java
+/NUL
+~$*

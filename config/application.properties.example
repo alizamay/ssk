@@ -1,0 +1,17 @@
+# Copy to config/application.properties (git-ignored) and fill in real values.
+# These keys resolve the ${SSK_*} placeholders in src/main/resources/application*.properties.
+# They can also be supplied as OS environment variables with the same names.
+#
+# Production (WildFly) reads its own per-node properties from ${jboss.server.config.dir};
+# those files must define the real values for the same settings.
+
+SSK_JWT_SECRET=
+SSK_JWT_SECRET_RPI=
+SSK_DB_USERNAME=
+SSK_DB_PASSWORD=
+SSK_APIKEY_FOR_DEVICE=
+SSK_APIKEY_FOR_TTSM=
+SSK_APIKEY_BY_TTSM=
+
+# Used only by the wildfly-maven-plugin deploy goal (pom.xml), set as an OS env var:
+# SSK_JBOSS_PASSWORD=

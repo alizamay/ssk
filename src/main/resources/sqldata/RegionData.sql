@@ -1,0 +1,6 @@
+INSERT INTO smartsite.Region (id, code, name, active, CREATED_AT, UPDATED_AT) VALUES (1, 'CR', 'CR', true, '2020-12-06 21:05:43.100932', '2020-12-06 21:05:43.100932');
+INSERT INTO smartsite.Region (id, code, name, active, CREATED_AT, UPDATED_AT) VALUES (2, 'BKK', 'BKK', true, '2020-12-06 21:05:43.100932', '2020-12-06 21:05:43.100932');
+INSERT INTO smartsite.Region (id, code, name, active, CREATED_AT, UPDATED_AT) VALUES (3, 'ER', 'ER', true, '2020-12-06 21:05:43.100932', '2020-12-06 21:05:43.100932');
+INSERT INTO smartsite.Region (id, code, name, active, CREATED_AT, UPDATED_AT) VALUES (4, 'NR', 'NR', true, '2020-12-06 21:05:43.100932', '2020-12-06 21:05:43.100932');
+INSERT INTO smartsite.Region (id, code, name, active, CREATED_AT, UPDATED_AT) VALUES (5, 'SR', 'SR', true, '2020-12-06 21:05:43.100932', '2020-12-06 21:05:43.100932');
+INSERT INTO smartsite.Region (id, code, name, active, CREATED_AT, UPDATED_AT) VALUES (6, 'NER', 'NER', true, '2020-12-06 21:05:43.100932', '2020-12-06 21:05:43.100932');

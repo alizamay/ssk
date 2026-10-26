@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="DEBUG">
+    <Appenders>
+        <GELF name="gelfAppender" server="10.138.36.77"
+              hostName="appserver_1" port="12201">
+            <KeyValuePair key="extractStacktrace" value="true" />
+            <KeyValuePair key="addExtendedInformation" value="true" />
+            <KeyValuePair key="facility" value="gelf-java" />
+            <KeyValuePair key="environment" value="dev" />
+            <KeyValuePair key="application" value="MyApp" />
+            <KeyValuePair key="additionalFields" value="{'environment': 'dev', 'application': 'MyAPP'}" />
+        </GELF>
+    <Console name="LogToConsole" target="SYSTEM_OUT">
+        <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+    </Console>
+    <File name="LogToFile" fileName="logs/app.log">
+        <PatternLayout>
+            <Pattern>%d %p %c{1.} [%t] %m%n</Pattern>
+        </PatternLayout>
+    </File>
+</Appenders>
+<Loggers>
+    <Logger name="dev.niceone" level="warn" additivity="false">
+        <AppenderRef ref="LogToConsole"/>
+        <AppenderRef ref="LogToFile"/>
+        <AppenderRef ref="gelfAppender"/>
+    </Logger>
+    <Logger name="org.springframework.boot" level="error" additivity="false">
+        <AppenderRef ref="LogToConsole"/>
+    </Logger>
+    <Root level="warn" additivity="false" includeLocation="true">
+        <AppenderRef ref="LogToConsole"/>
+        <AppenderRef ref="LogToFile"/>
+        <AppenderRef ref="gelfAppender"/>
+    </Root>
+</Loggers>
+</Configuration>

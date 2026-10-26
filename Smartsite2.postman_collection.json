@@ -1,0 +1,410 @@
+{
+	"info": {
+		"_postman_id": "938cca17-8108-4de2-a367-c6aae4a4f4a5",
+		"name": "Smartsite2",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "auth",
+			"item": [
+				{
+					"name": "login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{ \"usernameOrEmail\":\"admin\",\"password\":\"{{password}}\"}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8181/api/auth/signin",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"auth",
+								"signin"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "activate",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "",
+								"value": "",
+								"type": "text"
+							},
+							{
+								"key": "",
+								"value": "",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"accessToken\": \"{{token}}\",\r\n  \"tokenType\": \"Bearer\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8181/api/auth/activate",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"auth",
+								"activate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "pi/activate",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{ \"code\":\"BKK1\",\"ip\":\"0.0.0.0\",\"port\":9999}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8181/api/auth/pi/activate",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"auth",
+								"pi",
+								"activate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "user list",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8181/api/user/list",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"user",
+								"list"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "user me",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8181/api/user/me",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"user",
+								"me"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "site",
+			"item": [
+				{
+					"name": "new site",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"code\": \"NNN3\",\n    \"name_th\": \"NNN3\",\n    \"region_id\": 11,\n    \"province_id\": 13,\n    \"district_id\": 17,\n    \"sub_district_id\": 22,\n    \"cabinets\": [\n        {\n            \"cabinet_no\": 1,\n            \"active\": \"true\",\n            \"devices\": [\n                {\n                    \"type_id\": 1,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                {\n                    \"type_id\": 2,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                 {\n                    \"type_id\": 3,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                }\n            ]\n        },\n        {\n            \"cabinet_no\": 2,\n            \"active\": \"true\",\n            \"devices\": [\n                {\n                    \"type_id\": 1,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                {\n                    \"type_id\": 2,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                 {\n                    \"type_id\": 3,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                }\n            ]\n        },\n        {\n            \"cabinet_no\": 3,\n            \"active\": \"true\",\n            \"devices\": [\n                {\n                    \"type_id\": 1,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                {\n                    \"type_id\": 2,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                 {\n                    \"type_id\": 3,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                }\n            ]\n        }\n    ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8181/api/site/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"site",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "retrieve site",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"type": "text",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"code\": \"NNN3\",\n    \"name_th\": \"NNN3\",\n    \"region_id\": 11,\n    \"province_id\": 13,\n    \"district_id\": 17,\n    \"sub_district_id\": 22,\n    \"cabinets\": [\n        {\n            \"cabinet_no\": 1,\n            \"active\": \"true\",\n            \"devices\": [\n                {\n                    \"type\": 1,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                {\n                    \"type\": 2,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                 {\n                    \"type\": 3,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                }\n            ]\n        },\n        {\n            \"cabinet_no\": 2,\n            \"active\": \"true\",\n            \"devices\": [\n                {\n                    \"type\": 1,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                {\n                    \"type\": 2,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                 {\n                    \"type\": 3,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                }\n            ]\n        },\n        {\n            \"cabinet_no\": 3,\n            \"active\": \"true\",\n            \"devices\": [\n                {\n                    \"type\": 1,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                {\n                    \"type\": 2,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                },\n                 {\n                    \"type\": 3,\n                    \"installed\": \"true\",\n                    \"enabled\": \"true\"\n                }\n            ]\n        }\n    ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8181/api/site/42",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"site",
+								"42"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update site",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"type": "text",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"id\": 42,\r\n  \"code\": \"NNN333\",\r\n  \"name_th\": \"NNN3\",\r\n  \"name_en\": \"NNN3\",\r\n  \"region_id\": 11,\r\n  \"region_name\": \"Region BKK\",\r\n  \"region_code\": \"BKK\",\r\n  \"status_id\": 26,\r\n  \"status_name\": \"Offline\",\r\n  \"status_code\": \"offline\",\r\n  \"province_id\": 13,\r\n  \"province_name_th\": \"กรุงเทพ1\",\r\n  \"province_name_en\": \"Bangkok1\",\r\n  \"province_code\": \"BKK1\",\r\n  \"district_id\": 17,\r\n  \"district_name_th\": \"อำเภอกรุงเทพ1\",\r\n  \"district_name_en\": \"Dis Bangkok1\",\r\n  \"district_code\": \"dis_BKK1\",\r\n  \"sub_district_id\": 22,\r\n  \"sub_district_name_th\": \"ตำบลกรุงเทพ1\",\r\n  \"sub_district_name_en\": \"Sub Bangkok1\",\r\n  \"sub_district_zipcode\": \"10000\",\r\n  \"site_key\": null,\r\n  \"installed_date\": null,\r\n  \"changed_date\": \"2020-04-15T04:21:09.125+0000\",\r\n  \"active\": true,\r\n  \"lat\": null,\r\n  \"lon\": null,\r\n  \"ip_address\": null,\r\n  \"port\": 0,\r\n  \"subnet_mask\": null,\r\n  \"default_gateway\": null,\r\n  \"address\": null,\r\n  \"cabinets\": [\r\n    {\r\n      \"id\": 43,\r\n      \"cabinet_no\": 1,\r\n      \"active\": null,\r\n      \"devices\": [\r\n        {\r\n          \"id\": 44,\r\n          \"type_id\": 1,\r\n          \"type_name_en\": \"Smart Lock\",\r\n          \"type_name_th\": \"ล็อก\",\r\n          \"installed\": true,\r\n          \"enabled\": true\r\n        },\r\n        {\r\n          \"id\": 45,\r\n          \"type_id\": 2,\r\n          \"type_name_en\": \"Buzzer\",\r\n          \"type_name_th\": \"สัญญานเสียง\",\r\n          \"installed\": true,\r\n          \"enabled\": true\r\n        },\r\n        {\r\n          \"id\": 46,\r\n          \"type_id\": 3,\r\n          \"type_name_en\": \"Pinhole Camera\",\r\n          \"type_name_th\": \"กล้องรูเข็ม\",\r\n          \"installed\": true,\r\n          \"enabled\": true\r\n        }\r\n      ]\r\n    },\r\n    {\r\n      \"id\": 47,\r\n      \"cabinet_no\": 2,\r\n      \"active\": null,\r\n      \"devices\": [\r\n        {\r\n          \"id\": 48,\r\n          \"type_id\": 1,\r\n          \"type_name_en\": \"Smart Lock\",\r\n          \"type_name_th\": \"ล็อก\",\r\n          \"installed\": true,\r\n          \"enabled\": true\r\n        },\r\n        {\r\n          \"id\": 49,\r\n          \"type_id\": 2,\r\n          \"type_name_en\": \"Buzzer\",\r\n          \"type_name_th\": \"สัญญานเสียง\",\r\n          \"installed\": true,\r\n          \"enabled\": true\r\n        },\r\n        {\r\n          \"id\": 50,\r\n          \"type_id\": 3,\r\n          \"type_name_en\": \"Pinhole Camera\",\r\n          \"type_name_th\": \"กล้องรูเข็ม\",\r\n          \"installed\": true,\r\n          \"enabled\": true\r\n        }\r\n      ]\r\n    },\r\n    {\r\n      \"id\": 51,\r\n      \"cabinet_no\": 3,\r\n      \"active\": null,\r\n      \"devices\": [\r\n        {\r\n          \"id\": 52,\r\n          \"type_id\": 1,\r\n          \"type_name_en\": \"Smart Lock\",\r\n          \"type_name_th\": \"ล็อก\",\r\n          \"installed\": true,\r\n          \"enabled\": true\r\n        },\r\n        {\r\n          \"id\": 53,\r\n          \"type_id\": 2,\r\n          \"type_name_en\": \"Buzzer\",\r\n          \"type_name_th\": \"สัญญานเสียง\",\r\n          \"installed\": true,\r\n          \"enabled\": true\r\n        },\r\n        {\r\n          \"id\": 54,\r\n          \"type_id\": 3,\r\n          \"type_name_en\": \"Pinhole Camera\",\r\n          \"type_name_th\": \"กล้องรูเข็ม\",\r\n          \"installed\": true,\r\n          \"enabled\": true\r\n        }\r\n      ]\r\n    }\r\n  ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8181/api/site/42",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"site",
+								"42"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "address",
+			"item": [
+				{
+					"name": "region/list",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8181/api/region/list",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"region",
+								"list"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "district/list",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8181/api/district/list",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"district",
+								"list"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "sub-district/list",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8181/api/sub-district/list",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8181",
+							"path": [
+								"api",
+								"sub-district",
+								"list"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "user",
+			"item": [],
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "actuator/info",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://172.16.207.1:8181/actuator/info",
+					"protocol": "http",
+					"host": [
+						"172",
+						"16",
+						"207",
+						"1"
+					],
+					"port": "8181",
+					"path": [
+						"actuator",
+						"info"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"protocolProfileBehavior": {}
+}
