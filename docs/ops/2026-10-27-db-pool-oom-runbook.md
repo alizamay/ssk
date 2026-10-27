@@ -84,8 +84,8 @@ app.onsite_check_log.retention_days=0
 |---|---|
 | `Default async executor initialized` | `STATUS_PERF`, `QUEUE_BACKLOG`, `LOW_THROUGHPUT` |
 | thread ชื่อ `async-default-N` | thread ชื่อ `SimpleAsyncTaskExecutor-N` |
-| `MEMORY_MONITOR | Heap: 812.3MB/4096.0MB (19.8%)` (มีตัวเลขจริง) | `HikariPool ... Connection is not available` |
-| `THREAD_MONITOR | Active:` คงที่ไม่เกิน ~300 | `Apparent connection leak detected` ต่อเนื่อง |
+| `MEMORY_MONITOR` ที่มีตัวเลข heap จริง เช่น `Heap: 812.3MB/4096.0MB (19.8%)` | `HikariPool ... Connection is not available` |
+| `THREAD_MONITOR` ค่า `Active:` คงที่ไม่เกิน ~300 | `Apparent connection leak detected` ต่อเนื่อง |
 
 node ที่รัน scheduler ต้องมี `Scheduler lock on startup: ACQUIRED` หรือ `STANDBY` และใน cluster ต้องมี leader 1 node เสมอ ตรวจได้จาก DB:
 
