@@ -75,6 +75,8 @@ import java.util.*;
 import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -186,6 +188,15 @@ public class SiteScheduler {
             // พยายามยึด lock ทันทีตอน startup
             boolean acquired = schedulerLockService.tryAcquireOrRenew();
             log.info("Scheduler lock on startup: {} (nodeId={})", acquired ? "ACQUIRED" : "STANDBY", schedulerLockService.getNodeId());
+
+            // Heartbeat มี thread ของตัวเอง: @Scheduled ทุกตัวใช้ pool เดียวกัน (MessageBroker-*)
+            // ถ้างานอื่นยาวหรือรอ DB connection อยู่ heartbeat จะเลื่อนจน lock หมดอายุ
+            lockHeartbeat = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "scheduler-lock-heartbeat");
+                t.setDaemon(true);
+                return t;
+            });
+            lockHeartbeat.scheduleWithFixedDelay(this::renewSchedulerLock, 30, 30, TimeUnit.SECONDS);
         }
 
         // สร้าง WebClient สำหรับส่ง emergency key ครั้งเดียว (ใช้ซ้ำทุก site)
@@ -221,26 +232,32 @@ public class SiteScheduler {
     }
 
     // Heartbeat ทุก 30 วินาที — ยึด lock ถ้าเป็น leader, หรือ steal ถ้า leader ตาย
-    @Scheduled(fixedDelay = 30000)
-    public void renewSchedulerLock() {
-        String site_scheduler = env.getProperty("app.site_scheduler", "no").trim();
-        if (site_scheduler.equals("no")) return;
+    private ScheduledExecutorService lockHeartbeat;
 
-        boolean wasLeader = schedulerLockService.isLeader();
-        boolean isLeaderNow = schedulerLockService.tryAcquireOrRenew();
+    void renewSchedulerLock() {
+        // ห้ามให้ exception หลุดออกไป: ScheduledExecutorService จะยกเลิกรอบถัดไปทั้งหมดเงียบๆ
+        try {
+            boolean wasLeader = schedulerLockService.isLeader();
+            boolean isLeaderNow = schedulerLockService.tryAcquireOrRenew();
 
-        if (!wasLeader && isLeaderNow) {
-            log.info("This node became scheduler leader (nodeId={})", schedulerLockService.getNodeId());
-        } else if (wasLeader && !isLeaderNow) {
-            log.warn("This node lost scheduler leadership (nodeId={})", schedulerLockService.getNodeId());
+            if (!wasLeader && isLeaderNow) {
+                log.info("This node became scheduler leader (nodeId={})", schedulerLockService.getNodeId());
+            } else if (wasLeader && !isLeaderNow) {
+                log.warn("This node lost scheduler leadership (nodeId={})", schedulerLockService.getNodeId());
+            }
+        } catch (Throwable t) {
+            log.error("Scheduler lock heartbeat failed (nodeId={}): {}", schedulerLockService.getNodeId(), t.getMessage());
         }
     }
 
     @javax.annotation.PreDestroy
     public void cleanup() {
         log.info("Cleaning up SiteScheduler resources...");
+        if (lockHeartbeat != null) {
+            lockHeartbeat.shutdownNow();
+        }
         String site_scheduler = env.getProperty("app.site_scheduler", "no").trim();
-        if (site_scheduler.equals("yes") && schedulerLockService.isLeader()) {
+        if (site_scheduler.equals("yes")) {
             schedulerLockService.releaseLock();
         }
 

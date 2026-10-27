@@ -32,12 +32,11 @@ public interface SchedulerLockRepository extends JpaRepository<SchedulerLock, St
                           @Param("nodeId") String nodeId,
                           @Param("expireSec") int expireSec);
 
-    // เช็คว่า node นี้ถือ lock อยู่และ heartbeat ยังสด
-    @Query(value = "SELECT COUNT(*) FROM smartsite.scheduler_lock " +
-                   "WHERE lock_name = :lockName AND node_id = :nodeId " +
-                   "AND heartbeat_at >= NOW() - CAST((:expireSec || ' seconds') AS INTERVAL)",
+    // ปล่อย lock: ทำให้ heartbeat เก่าจน expired เฉพาะเมื่อ node นี้ถือ lock อยู่
+    @Modifying
+    @Query(value = "UPDATE smartsite.scheduler_lock " +
+                   "SET heartbeat_at = TIMESTAMP '1970-01-01 00:00:00' " +
+                   "WHERE lock_name = :lockName AND node_id = :nodeId",
            nativeQuery = true)
-    int countActiveLock(@Param("lockName") String lockName,
-                        @Param("nodeId") String nodeId,
-                        @Param("expireSec") int expireSec);
+    int release(@Param("lockName") String lockName, @Param("nodeId") String nodeId);
 }

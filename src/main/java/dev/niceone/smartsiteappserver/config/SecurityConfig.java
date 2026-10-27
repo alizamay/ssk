@@ -5,6 +5,7 @@ import dev.niceone.smartsiteappserver.repository.UserRepository;
 import dev.niceone.smartsiteappserver.security.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -60,6 +61,12 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
     @Autowired
     private UserRepository userRepo;
+
+    // /api/internal/authin/** (insert log, export, proxy to the authin config service) needs a JWT.
+    // Set app.security.authin_public=yes in the node properties to restore the old public access
+    // if a caller that cannot send a token is found.
+    @Value("${app.security.authin_public:no}")
+    private String authinPublic;
 
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
@@ -156,6 +163,10 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     @Override
     protected void configure(HttpSecurity http) throws Exception {
 
+        String[] authinPublicPaths = "yes".equalsIgnoreCase(authinPublic.trim())
+                ? new String[]{"/api/internal/authin/**"}
+                : new String[0];
+
         http
                 .cors()
                 .and()
@@ -201,7 +212,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .permitAll()
                 .antMatchers("/h2-console/**")
                 .permitAll()
-                .antMatchers("/api/internal/authin/**")
+                .antMatchers(authinPublicPaths)
                 .permitAll()
                 .antMatchers("/api/summary/**")
                 .permitAll()

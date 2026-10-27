@@ -9,6 +9,10 @@ import dev.niceone.smartsiteappserver.repository.AuthinLogsRepository;
 import dev.niceone.smartsiteappserver.service.AuthinService;
 import dev.niceone.smartsiteappserver.specification.AuthinLogsSpecifications;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -85,12 +90,20 @@ public class AuthinController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             HttpServletResponse response
     ) throws IOException {
+        // Without a range this loaded the whole authin_logs table (~100k rows/day) into memory.
+        // Default to today, cap the range, and stream page by page.
+        LocalDateTime end = to != null ? to : LocalDateTime.now();
+        LocalDateTime start = from != null ? from : end.toLocalDate().atStartOfDay();
+        if (start.isAfter(end) || Duration.between(start, end).toDays() > MAX_EXPORT_DAYS) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+                    "from/to must be a range of at most " + MAX_EXPORT_DAYS + " days");
+            return;
+        }
+
         Specification<AuthinLogs> spec = Specification
                 .where(AuthinLogsSpecifications.siteCodeLike(siteCode))
                 .and(AuthinLogsSpecifications.isClear(isClear))
-                .and(AuthinLogsSpecifications.timestampBetween(from, to));
-
-        List<AuthinLogs> logs = authinLogsRepository.findAll(spec);
+                .and(AuthinLogsSpecifications.timestampBetween(start, end));
 
         response.setContentType("text/csv");
         response.setHeader("Content-Disposition", "attachment; filename=\"authin_logs.csv\"");
@@ -98,22 +111,32 @@ public class AuthinController {
         try (CSVWriter writer = new CSVWriter(response.getWriter())) {
             writer.writeNext(new String[]{"ID", "site_code", "is_clear", "timestamp", "message"});
 
-            for (AuthinLogs log : logs) {
+            Pageable pageable = PageRequest.of(0, EXPORT_PAGE_SIZE, Sort.by("timestamp", "id"));
+            Slice<AuthinLogs> slice;
+            do {
+                slice = authinLogsRepository.findAll(spec, pageable);
+                for (AuthinLogs log : slice.getContent()) {
 
-                String statusName = "Create";
+                    String statusName = "Create";
 
-                if(log.getIsClear()){
-                    statusName = "Clear";
+                    if(log.getIsClear()){
+                        statusName = "Clear";
+                    }
+
+                    writer.writeNext(new String[]{
+                            String.valueOf(log.getId()),
+                            log.getSiteCode(),
+                            statusName,
+                            log.getTimestamp().toString(),
+                            log.getMessage()
+                    });
                 }
-
-                writer.writeNext(new String[]{
-                        String.valueOf(log.getId()),
-                        log.getSiteCode(),
-                        statusName,
-                        log.getTimestamp().toString(),
-                        log.getMessage()
-                });
-            }
+                writer.flush();
+                pageable = slice.nextPageable();
+            } while (slice.hasNext());
         }
     }
+
+    private static final int MAX_EXPORT_DAYS = 31;
+    private static final int EXPORT_PAGE_SIZE = 5000;
 }

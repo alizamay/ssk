@@ -45,6 +45,28 @@ spring.datasource.hikari.maxLifetime=900000
 
 รวม = 15×2 + 8×6 = 78 connection ถ้า `max_connections` มากกว่านี้ค่อยเพิ่มตามสัดส่วน **อย่าตั้ง 100 ต่อ node**
 
+### Scheduler: ให้มี node สำรองมากกว่า 1 server
+
+ตอนนี้มีแค่ PSSMA802G ที่ตั้ง `app.site_scheduler=yes` พอ 802G ตายทั้งสอง node ก็ไม่มี leader (10-02 ถึง 10-08) และไม่มีอะไร mark site เป็น DOWN
+
+ระบบใช้ DB lock ตัดสินว่า node ไหนเป็น leader และ**ทำงานได้ทีละ node เดียวเสมอ** จึงเปิดเพิ่มได้อย่างปลอดภัย แนะนำให้เปิดอย่างน้อย 1 node ในอีก server:
+
+```properties
+# PSSMA801G node1 (เพิ่ม)
+app.site_scheduler=yes
+```
+
+### ค่าใหม่ (ไม่ใส่ก็ได้ ใช้ค่า default)
+
+```properties
+# /api/internal/authin/** ต้องมี JWT แล้ว ถ้าเจอระบบที่เรียกโดยไม่มี token ให้ตั้ง yes แล้ว restart
+app.security.authin_public=no
+# onsite_check_log เก็บเฉพาะเมื่อผลเปลี่ยน หรือทุก 300 วินาทีต่อ site+IP (0 = เก็บทุก request แบบเดิม)
+app.onsite_check_log.min_interval_sec=300
+# ลบ onsite_check_log ที่เก่ากว่า N วัน ทุกวัน 03:40 บน leader (0 = ไม่ลบ; ต้องตกลงระยะเวลาเก็บก่อน)
+app.onsite_check_log.retention_days=0
+```
+
 ## 3. JVM options (`standalone.conf`)
 
 ```
@@ -65,7 +87,16 @@ spring.datasource.hikari.maxLifetime=900000
 | `MEMORY_MONITOR | Heap: 812.3MB/4096.0MB (19.8%)` (มีตัวเลขจริง) | `HikariPool ... Connection is not available` |
 | `THREAD_MONITOR | Active:` คงที่ไม่เกิน ~300 | `Apparent connection leak detected` ต่อเนื่อง |
 
-node ที่รัน scheduler ต้องมี log ว่าได้ leader lock และมี `checkSiteStatus` ทำงานทุกนาที
+node ที่รัน scheduler ต้องมี `Scheduler lock on startup: ACQUIRED` หรือ `STANDBY` และใน cluster ต้องมี leader 1 node เสมอ ตรวจได้จาก DB:
+
+```sql
+SELECT node_id, acquired_at, heartbeat_at, now() - heartbeat_at AS age
+FROM smartsite.scheduler_lock WHERE lock_name = 'main_scheduler';
+```
+
+`age` ต้องไม่เกิน ~30 วินาที ถ้าเกิน 120 วินาที แปลว่าไม่มี leader (ควรตั้ง alert ที่ค่านี้)
+
+ตอน restart node ที่เป็น leader ตอนนี้ปล่อย lock จริงแล้ว node สำรองจะรับต่อภายใน ~30 วินาที (เดิมต้องรอ 120 วินาที)
 
 ## 5. ถ้ามีปัญหาหลัง deploy (rollback แบบไม่ต้องเปลี่ยน WAR)
 

@@ -25,6 +25,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -37,7 +38,12 @@ import java.util.stream.Collectors;
 @Service
 public class AuthinService {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    // Timeouts: without them a hung authin config service on :3001 pins request threads forever.
+    private final RestTemplate restTemplate = new RestTemplateBuilder()
+            .setConnectTimeout(Duration.ofSeconds(3))
+            .setReadTimeout(Duration.ofSeconds(15))
+            .build();
+    private static final int MAX_PAGE_SIZE = 500;
     private final String authinBaseUrl = "http://127.0.0.1:3001/api/authin";
     @Autowired
     private ObjectMapper objectMapper;
@@ -124,7 +130,7 @@ public class AuthinService {
                     : LocalDateTime.now().toLocalDate().atTime(23, 59, 59);
 
             int page = Integer.parseInt(queryParams.getOrDefault("page", "1")) - 1;
-            int size = Integer.parseInt(queryParams.getOrDefault("size", "20"));
+            int size = Math.min(Integer.parseInt(queryParams.getOrDefault("size", "20")), MAX_PAGE_SIZE);
             Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
 
             // ใช้ Specification
