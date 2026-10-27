@@ -1,0 +1,35 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Asia/Bangkok
+    open-pull-requests-limit: 10
+    labels: [dependencies, security]
+    groups:
+      maven-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Spring Boot 3+/4+ needs Java 17 + Jakarta EE (javax -> jakarta) and a newer WildFly;
+      # that is a planned migration, not an automatic PR. Remove once the migration starts.
+      - dependency-name: "org.springframework.boot:*"
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Asia/Bangkok
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly

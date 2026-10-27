@@ -1,0 +1,31 @@
+name: Dependency graph
+
+# GitHub's dependency graph only reads direct dependencies from pom.xml.
+# Submitting the resolved Maven tree lets Dependabot alert on transitive jars too
+# (e.g. log4j-core, tomcat-embed-core, snakeyaml pulled in by starters).
+
+on:
+  push:
+    branches: [main]
+    paths: [pom.xml]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - uses: advanced-security/maven-dependency-submission-action@a64327a7329c9939cf675e458452febe1894a70c # v6.0.1
