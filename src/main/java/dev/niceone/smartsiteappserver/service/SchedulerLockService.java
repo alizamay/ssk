@@ -3,6 +3,7 @@ package dev.niceone.smartsiteappserver.service;
 import dev.niceone.smartsiteappserver.repository.SchedulerLockRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,7 +14,9 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class SchedulerLockService {
 
-    private static final String LOCK_NAME = "main_scheduler";
+    // แยกชื่อ lock ได้ เมื่อหลาย environment (เช่น UAT กับเครื่อง dev) ใช้ DB เดียวกัน
+    @Value("${app.scheduler.lock_name:main_scheduler}")
+    private String lockName = "main_scheduler";
     // lock expire ถ้าไม่มี heartbeat นาน 120 วินาที (4 รอบ heartbeat)
     private static final int LOCK_EXPIRE_SEC = 120;
     // node นี้ถือว่าตัวเองเป็น leader ได้ไม่เกิน 90 วินาทีหลัง renew สำเร็จครั้งล่าสุด
@@ -50,9 +53,9 @@ public class SchedulerLockService {
         long start = System.nanoTime();
         try {
             // สร้าง row ถ้ายังไม่มี (first boot ของทั้ง cluster)
-            repository.insertIfNotExists(LOCK_NAME, nodeId);
+            repository.insertIfNotExists(lockName, nodeId);
 
-            int updated = repository.tryAcquireOrRenew(LOCK_NAME, nodeId, LOCK_EXPIRE_SEC);
+            int updated = repository.tryAcquireOrRenew(lockName, nodeId, LOCK_EXPIRE_SEC);
             leaderUntilNanos = updated > 0 ? start + LEASE_NANOS : 0;
 
             if (updated > 0) {
@@ -72,7 +75,7 @@ public class SchedulerLockService {
         leaderUntilNanos = 0;
         try {
             // ทำให้ heartbeat หมดอายุทันที → node อื่น steal ได้ในรอบ heartbeat ถัดไป
-            int released = repository.release(LOCK_NAME, nodeId);
+            int released = repository.release(lockName, nodeId);
             log.info("Scheduler lock {} by node ({})", released > 0 ? "released" : "was not held", nodeId);
         } catch (Exception e) {
             log.error("Error releasing scheduler lock: {}", e.getMessage());

@@ -187,6 +187,7 @@ public class SiteScheduler {
             log.info("Startup grace period active — offline detection resumes at {}", schedulerReadyTime);
             // พยายามยึด lock ทันทีตอน startup
             boolean acquired = schedulerLockService.tryAcquireOrRenew();
+            leaderAtLastHeartbeat = acquired;
             log.info("Scheduler lock on startup: {} (nodeId={})", acquired ? "ACQUIRED" : "STANDBY", schedulerLockService.getNodeId());
 
             // Heartbeat มี thread ของตัวเอง: @Scheduled ทุกตัวใช้ pool เดียวกัน (MessageBroker-*)
@@ -233,12 +234,16 @@ public class SiteScheduler {
 
     // Heartbeat ทุก 30 วินาที — ยึด lock ถ้าเป็น leader, หรือ steal ถ้า leader ตาย
     private ScheduledExecutorService lockHeartbeat;
+    // ผลของ heartbeat ครั้งก่อน (ไม่ใช้ isLeader() เพราะ lease อาจหมดไประหว่าง JVM ค้าง
+    // ทำให้ไม่เห็นว่าเสีย leadership)
+    private volatile boolean leaderAtLastHeartbeat = false;
 
     void renewSchedulerLock() {
         // ห้ามให้ exception หลุดออกไป: ScheduledExecutorService จะยกเลิกรอบถัดไปทั้งหมดเงียบๆ
         try {
-            boolean wasLeader = schedulerLockService.isLeader();
+            boolean wasLeader = leaderAtLastHeartbeat;
             boolean isLeaderNow = schedulerLockService.tryAcquireOrRenew();
+            leaderAtLastHeartbeat = isLeaderNow;
 
             if (!wasLeader && isLeaderNow) {
                 log.info("This node became scheduler leader (nodeId={})", schedulerLockService.getNodeId());
