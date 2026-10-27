@@ -42,6 +42,11 @@ public class SimpleCache<K, V> {
         scheduler.scheduleAtFixedRate(this::cleanExpiredEntries, interval, interval, TimeUnit.MINUTES);
     }
     
+    @javax.annotation.PreDestroy
+    public void shutdown() {
+        scheduler.shutdownNow();
+    }
+
     public void put(K key, V value, long ttlMinutes) {
         cache.put(key, new CacheItem<>(value, ttlMinutes * 60 * 1000));
     }

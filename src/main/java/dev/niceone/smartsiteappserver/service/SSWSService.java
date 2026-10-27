@@ -28,7 +28,9 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -68,6 +70,12 @@ public class SSWSService {
         this.deviceRepository = deviceRepository;
         this.siteRepository = siteRepository;
         this.debouncer = new Debouncer(callback, 2000);
+    }
+
+    // Stop the debouncer thread on undeploy/redeploy so WildFly does not accumulate threads.
+    @PreDestroy
+    public void shutdownDebouncer() {
+        debouncer.terminate();
     }
 
     @Autowired
@@ -114,6 +122,7 @@ public class SSWSService {
         return ResponseEntity.status(HttpStatus.OK).body(new ApiResponse(true, "UPDATE OK"));
     }
 
+    @Transactional
     public ResponseEntity<ApiResponse> ioReport(IOReport request) {
         Cabinet cabinet = cabinetRepository.findByCode(request.getCabinet_code());
         if (cabinet == null) {
@@ -123,7 +132,7 @@ public class SSWSService {
         AtomicReference<Boolean> isModified = new AtomicReference<>(false);
 
         List<AuxDevice> auxes = cabinet.getAux_devices();
-        log.info("auxes "+auxes);
+        log.debug("auxes {}", auxes);
         if (auxes == null || auxes.isEmpty()) {
             if (cabinet.getCabinetNo() == 1) {
                 cabinet.addAuxDevice(new AuxDevice(0, false));
@@ -297,7 +306,7 @@ public class SSWSService {
             cabinet.setUpdatedAt(LocalDateTime.now());
             //cabinet.getDevices().forEach();
             cabinetRepository.saveAndFlush(cabinet);
-            log.info("process end update cabinet all from board complete site update status "+request.getSite_code()+" ");
+            log.debug("process end update cabinet all from board complete site update status {}", request.getSite_code());
 
         });
     }
@@ -353,8 +362,7 @@ public class SSWSService {
 
             //log.info("save report status online site "+site.getCode());
         }catch (Exception ex){
-
-           // log.info("save report status online error "+ex.getMessage() +" site "+site.getCode());
+            log.warn("save report status online error site {}: {}", site.getCode(), ex.getMessage());
         }
 
     }

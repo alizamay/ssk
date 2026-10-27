@@ -30,7 +30,6 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -227,17 +226,6 @@ public class AlarmLogCasService {
         User user = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new AppException("User not set."));
 
-        // Site
-        List<Long> siteIds = new ArrayList<>();
-        user.getRegions().forEach((region) -> {
-            region.getSites().forEach((site) -> {
-                siteIds.add(site.getId());
-            });
-        });
-        user.getSites().forEach((site) -> {
-            siteIds.add(site.getId());
-        });
-
 
 //        FetchLogsResponse fetchLogs = fetchLogs(null,null,null,null,size,"");
 //        List<AlarmLogResponse> alarmLogResponses = fetchLogs.getLogs().stream().map(AlarmLogModelMapper::mapLogEntryResponse).collect(Collectors.toList());
@@ -318,17 +306,6 @@ public class AlarmLogCasService {
         // User
         User user = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new AppException("User not set."));
-
-        // Site
-        List<Long> siteIds = new ArrayList<>();
-        user.getRegions().forEach((region) -> {
-            region.getSites().forEach((site) -> {
-                siteIds.add(site.getId());
-            });
-        });
-        user.getSites().forEach((site) -> {
-            siteIds.add(site.getId());
-        });
 
 
         LocalDateTime startDateTime = LocalDateTime.now().with(LocalTime.of(0, 0, 1));
@@ -466,17 +443,6 @@ public class AlarmLogCasService {
         // User
         User user = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new AppException("User not set."));
-
-        // Site
-        List<Long> siteIds = new ArrayList<>();
-        user.getRegions().forEach((region) -> {
-            region.getSites().forEach((site) -> {
-                siteIds.add(site.getId());
-            });
-        });
-        user.getSites().forEach((site) -> {
-            siteIds.add(site.getId());
-        });
 
         LocalDateTime startDateTime = LocalDateTime.now().with(LocalTime.of(0, 0, 1));
         LocalDateTime endDateTime = LocalDateTime.now().with(LocalTime.of(23, 59, 59));
@@ -910,24 +876,21 @@ public class AlarmLogCasService {
 
     @Async
     public void sendTcpAlarm(String alarm, AuthinLogDto authinLogDto) {
-        log.info("Execute method sendTcpAlarm. "
-                + Thread.currentThread().getName());
+        log.debug("Execute method sendTcpAlarm. {}", Thread.currentThread().getName());
         String alarm_ip = env.getProperty("app.alarm_ip");
         String alarm_port = env.getProperty("app.alarm_port");
 
-        log.info("sendTcpAlarm "+alarm_ip+" "+alarm_port);
+        log.debug("sendTcpAlarm {} {}", alarm_ip, alarm_port);
         log.info(alarm);
         authinLogDto.setUrl(alarm_ip+":" + alarm_port);
-        Socket socket = new Socket();
         SocketAddress sockAddr = new InetSocketAddress(alarm_ip, Integer.parseInt(alarm_port));
-        try {
+        // try-with-resources: the socket was leaked (open fd) whenever connect() failed
+        try (Socket socket = new Socket()) {
             socket.connect(sockAddr, 5000);
-            OutputStream output = socket.getOutputStream();
-            PrintWriter writer = new PrintWriter(output, true);
+            socket.setSoTimeout(5000);
+            PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
             writer.print(alarm);
             writer.flush();
-            writer.close();
-            socket.close();
             authinLogDto.setMessage(alarm + ",[SUCCESS]");
         } catch (UnknownHostException ex) {
             log.error("sendTcpAlarm Server not found: " + ex.getMessage());
@@ -954,18 +917,18 @@ public class AlarmLogCasService {
             // ไม่มีข้อมูลเลย
             is_onsite = 0;
             raw = "No data in DB for site: " + siteCode;
-            log.info("askTTSMOnSite | Site: {} | No record found in DB", siteCode);
+            log.debug("askTTSMOnSite | Site: {} | No record found in DB", siteCode);
         } else {
             // มีข้อมูล → ใช้ logic ที่ถูกต้อง: เช็คว่ามี jobId ที่ยัง On-Site ค้างอยู่หรือไม่
             boolean hasActiveOnsite = ttsmWebhookService.isTechnicianOnsite(siteCode);
             if (hasActiveOnsite) {
                 is_onsite = 1;
                 raw = "On-Site";
-                log.info("askTTSMOnSite | Site: {} | Active On-Site job exists", siteCode);
+                log.debug("askTTSMOnSite | Site: {} | Active On-Site job exists", siteCode);
             } else {
                 is_onsite = 2;
                 raw = latest.getJobStatus();
-                log.info("askTTSMOnSite | Site: {} | No active On-Site job | Latest: {} | JobId: {}",
+                log.debug("askTTSMOnSite | Site: {} | No active On-Site job | Latest: {} | JobId: {}",
                         siteCode, latest.getJobStatus(), latest.getJobId());
             }
         }

@@ -41,7 +41,9 @@ public class Region extends AuditModel implements Serializable {
     @OneToMany(
             mappedBy = "region",
             cascade = CascadeType.ALL,
-            fetch = FetchType.EAGER,
+            // LAZY: EAGER pulled every site of the region (thousands of rows) whenever a Region was
+            // loaded, e.g. for each user's regions on login and on every alarm/event list request.
+            fetch = FetchType.LAZY,
             orphanRemoval = true
     )
     @Fetch(FetchMode.SELECT)

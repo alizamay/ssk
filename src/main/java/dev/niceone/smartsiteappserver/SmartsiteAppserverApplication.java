@@ -40,8 +40,26 @@ public class SmartsiteAppserverApplication {
     @Autowired
     private Environment env;
 
+    /**
+     * Defaults applied under every deployment (WAR on WildFly via ServletInitializer, or main()).
+     * They have the lowest precedence, so the per-node external properties can still override them.
+     *
+     * open-in-view=false: with OSIV each HTTP request held its JDBC connection until the response
+     * was written (seen in prod as "Apparent connection leak" from ioReport with pool size 5).
+     * enable_lazy_load_no_trans keeps existing lazy associations serialisable outside a transaction
+     * (each lazy load borrows a connection only for that one query).
+     */
+    static Map<String, Object> defaultProperties() {
+        Map<String, Object> props = new HashMap<>();
+        props.put("spring.jpa.open-in-view", "false");
+        props.put("spring.jpa.properties.hibernate.enable_lazy_load_no_trans", "true");
+        return props;
+    }
+
     public static void main(String[] args) {
-        SpringApplication.run(SmartsiteAppserverApplication.class, args);
+        SpringApplication app = new SpringApplication(SmartsiteAppserverApplication.class);
+        app.setDefaultProperties(defaultProperties());
+        app.run(args);
     }
 
 //    @Bean

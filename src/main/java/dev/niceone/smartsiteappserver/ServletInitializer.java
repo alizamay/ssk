@@ -10,7 +10,8 @@ public class ServletInitializer extends SpringBootServletInitializer {
 //        if (!System.getProperties().containsKey("spring.config.name")) {
 //            application = application.properties("spring.config.name:ssws");
 //        }
-        return application.sources(SmartsiteAppserverApplication.class);
+        return application.sources(SmartsiteAppserverApplication.class)
+                .properties(SmartsiteAppserverApplication.defaultProperties());
     }
 
 

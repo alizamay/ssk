@@ -141,7 +141,7 @@ public class SiteService {
             tmpCabinet.addDevice(tmpDevice);
 
             List<AuxDevice> auxes = tmpCabinet.getAux_devices();
-            log.info("auxes "+auxes);
+            log.debug("auxes {}", auxes);
             if (auxes == null || auxes.isEmpty()) {
                 if (tmpCabinet.getCabinetNo() == 1) {
                     tmpCabinet.addAuxDevice(new AuxDevice(0, false));
@@ -272,7 +272,7 @@ public class SiteService {
                 });
 
                 List<AuxDevice> auxes = finalTmpCabinet.getAux_devices();
-                log.info("auxes "+auxes);
+                log.debug("auxes {}", auxes);
                 if (auxes == null || auxes.isEmpty()) {
                     if (finalTmpCabinet.getCabinetNo() == 1) {
                         finalTmpCabinet.addAuxDevice(new AuxDevice(0, false));
@@ -329,7 +329,7 @@ public class SiteService {
                     tmpCabinet.addDevice(tmpDevice);
 
                     List<AuxDevice> auxes = tmpCabinet.getAux_devices();
-                    log.info("auxes "+auxes);
+                    log.debug("auxes {}", auxes);
                     if (auxes == null || auxes.isEmpty()) {
                         if (tmpCabinet.getCabinetNo() == 1) {
                             tmpCabinet.addAuxDevice(new AuxDevice(0, false));

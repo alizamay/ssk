@@ -61,12 +61,13 @@ public class MonitoringConfig {
         double nonHeapUsedMB = nonHeapUsed / (1024.0 * 1024.0);
         double heapPercent = (heapUsed * 100.0) / heapMax;
         
-        log.info("MEMORY_MONITOR | Heap: {:.1f}MB/{:.1f}MB ({:.1f}%) | NonHeap: {:.1f}MB", 
-                heapUsedMB, heapMaxMB, heapPercent, nonHeapUsedMB);
-        
+        // SLF4J has no "{:.1f}" placeholder (it was logged literally), so format explicitly.
+        log.info(String.format("MEMORY_MONITOR | Heap: %.1fMB/%.1fMB (%.1f%%) | NonHeap: %.1fMB",
+                heapUsedMB, heapMaxMB, heapPercent, nonHeapUsedMB));
+
         // Warning for high memory usage
         if (heapPercent > 80) {
-            log.warn("HIGH_MEMORY_USAGE | Heap usage: {:.1f}% - Consider memory optimization", heapPercent);
+            log.warn(String.format("HIGH_MEMORY_USAGE | Heap usage: %.1f%% - Consider memory optimization", heapPercent));
         }
     }
     

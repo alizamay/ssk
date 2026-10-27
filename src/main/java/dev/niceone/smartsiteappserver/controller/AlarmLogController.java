@@ -219,7 +219,7 @@ public class AlarmLogController {
         }
 
         String onsiteSource = schedulerConfigService.getConfigValue("onsite.source", "db");
-        log.info("askTTSM | onsite.source={}", onsiteSource);
+        log.debug("askTTSM | onsite.source={}", onsiteSource);
 
         ResponseEntity<OnsiteResponse> response;
         if ("ttsm_api".equals(onsiteSource)) {

@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -67,8 +68,31 @@ public class SchedulerConfigService {
      * Get config value by key
      */
     public String getConfigValue(String configKey, String defaultValue) {
-        Optional<SchedulerConfig> config = schedulerConfigRepository.findByConfigKeyAndIsActive(configKey);
-        return config.map(SchedulerConfig::getConfigValue).orElse(defaultValue);
+        long now = System.currentTimeMillis();
+        CachedConfig cached = configCache.get(configKey);
+        if (cached == null || cached.expiresAt < now) {
+            Optional<SchedulerConfig> config = schedulerConfigRepository.findByConfigKeyAndIsActive(configKey);
+            cached = new CachedConfig(config.map(SchedulerConfig::getConfigValue).orElse(null), now + CONFIG_CACHE_TTL_MS);
+            configCache.put(configKey, cached);
+        }
+        return cached.value != null ? cached.value : defaultValue;
+    }
+
+    /**
+     * Short TTL cache: getConfigValue was hit on every /api/alarm askTTSM request (~500k/day/node).
+     * Updates made on this node clear it immediately; other nodes pick changes up within the TTL.
+     */
+    private static final long CONFIG_CACHE_TTL_MS = 15_000;
+    private final Map<String, CachedConfig> configCache = new ConcurrentHashMap<>();
+
+    private static final class CachedConfig {
+        final String value;
+        final long expiresAt;
+
+        CachedConfig(String value, long expiresAt) {
+            this.value = value;
+            this.expiresAt = expiresAt;
+        }
     }
     
     /**
@@ -86,6 +110,7 @@ public class SchedulerConfigService {
     public boolean updateConfig(String configKey, String configValue, String updatedBy) {
         try {
             int updated = schedulerConfigRepository.updateConfigValue(configKey, configValue, updatedBy);
+            configCache.remove(configKey);
             if (updated > 0) {
                 log.info("Updated config: {} = {} (by: {})", configKey, configValue, updatedBy);
                 return true;
@@ -106,6 +131,7 @@ public class SchedulerConfigService {
     public boolean toggleConfig(String configKey, String updatedBy) {
         try {
             int updated = schedulerConfigRepository.toggleBooleanConfig(configKey, updatedBy);
+            configCache.remove(configKey);
             if (updated > 0) {
                 log.info("Toggled config: {} (by: {})", configKey, updatedBy);
                 return true;

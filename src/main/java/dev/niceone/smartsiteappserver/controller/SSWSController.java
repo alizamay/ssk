@@ -50,9 +50,6 @@ public class SSWSController {
         return ResponseEntity.ok("OK");
     }
 
-    @Autowired
-    private dev.niceone.smartsiteappserver.service.HighThroughputStatusService highThroughputStatusService;
-
     @PostMapping(value = "/status/report")
     ResponseEntity<?> statusReport(@Valid @RequestBody StatusReportRequest request,
                                    @RequestHeader HttpHeaders headers) {
@@ -68,20 +65,14 @@ public class SSWSController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiResponse(false, "Invalid API key"));
             }
         } catch (IOException e) {
-            // Log but don't fail - continue processing
             log.warn("API key validation error for {}: {}", request.getSite_code(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiResponse(false, "no apikey"));
         }
 
-        // Use high-throughput service instead of old debouncer approach
-        boolean processed = highThroughputStatusService.processStatusReport(request);
-        
-        if (processed) {
-            return sswsService.updateCabinetStatus_old(request);
-            //return ResponseEntity.ok(new ApiResponse(true, "OK"));
-        } else {
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(new ApiResponse(false, "System overloaded"));
-        }
+        // The debouncer path (markSiteUp) already updates status/reportStatusAt per site.
+        // HighThroughputStatusService was removed: its worker threads deadlocked on a
+        // read->write lock upgrade and its unbounded queue retained every report until OOM.
+        return sswsService.updateCabinetStatus_old(request);
     }
 
     @PostMapping(value = "/status/report_test")
