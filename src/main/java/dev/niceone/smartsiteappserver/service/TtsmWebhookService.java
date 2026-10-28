@@ -61,7 +61,8 @@ public class TtsmWebhookService {
         long now = System.currentTimeMillis();
         Cached<Boolean> cached = onsiteCache.get(siteCode);
         if (cached == null || cached.expiresAt < now) {
-            cached = new Cached<>(ttsmJobStatusRepository.existsActiveOnsiteJob(siteCode), now + CACHE_TTL_MS);
+            boolean onsite = ttsmJobStatusRepository.existsActiveOnsiteJob(siteCode);
+            cached = new Cached<>(onsite, now + ttlFor(onsite));
             onsiteCache.put(siteCode, cached);
         }
         return cached.value;
@@ -77,7 +78,7 @@ public class TtsmWebhookService {
             TtsmJobStatus latest = ttsmJobStatusRepository
                     .findFirstBySiteCodeOrderByReceivedAtDesc(siteCode)
                     .orElse(null);
-            cached = new Cached<>(latest, now + CACHE_TTL_MS);
+            cached = new Cached<>(latest, now + ttlFor(latest != null));
             latestCache.put(siteCode, cached);
         }
         return cached.value;
@@ -87,8 +88,15 @@ public class TtsmWebhookService {
      * Both lookups run on every askTTSM alarm request, and boards poll the same site many
      * times a minute. A webhook received on this node clears the site immediately; webhooks
      * received on other nodes become visible within the TTL.
+     * "Not on site" is kept only briefly: a technician who just checked in on another node
+     * must not be treated as an unauthorized opening for long.
      */
     private static final long CACHE_TTL_MS = 15_000;
+    private static final long NEGATIVE_CACHE_TTL_MS = 3_000;
+
+    private static long ttlFor(boolean positive) {
+        return positive ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS;
+    }
     private final Map<String, Cached<Boolean>> onsiteCache = new ConcurrentHashMap<>();
     private final Map<String, Cached<TtsmJobStatus>> latestCache = new ConcurrentHashMap<>();
 

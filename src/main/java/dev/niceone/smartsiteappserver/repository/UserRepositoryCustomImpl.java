@@ -28,7 +28,7 @@ public class UserRepositoryCustomImpl implements UserRepositoryCustom {
             "r.id as region_id, " +
             "r.name as region_name, " +
             "COUNT(DISTINCT s.id) as count_site, " +
-            "COUNT(DISTINCT CASE WHEN al.id IS NOT NULL AND al.resolve_date IS NULL AND al.active = true THEN s.id END) as count_site_active_alarm, " +
+            "COUNT(DISTINCT al.site_id) as count_site_active_alarm, " +
             "COUNT(DISTINCT c.id) as count_cabinet, " +
             "COUNT(DISTINCT CASE WHEN s.status = :statusUp THEN c.id END) as count_cabinet_online, " +
             "COUNT(DISTINCT CASE WHEN s.status = :statusDown THEN c.id END) as count_cabinet_offline, " +
@@ -39,7 +39,12 @@ public class UserRepositoryCustomImpl implements UserRepositoryCustom {
             "INNER JOIN smartsite.user_regions ur ON r.id = ur.region_id " +
             "LEFT JOIN smartsite.site s ON r.id = s.region_id AND s.active = true " +
             "LEFT JOIN smartsite.cabinet c ON s.id = c.site_id AND c.active = true " +
-            "LEFT JOIN smartsite.alarm_log al ON s.id = al.site_id AND al.active = true AND al.resolve_date IS NULL " +
+            // Alarms moved from alarm_log (no longer written) to site_event_log: one row per
+            // site, alarm type and cabinet per day, reopened by is_resolve. Only today's rows
+            // are ever resolved, so older unresolved rows are not counted.
+            "LEFT JOIN (SELECT DISTINCT site_id FROM smartsite.site_event_log " +
+            "           WHERE active = true AND is_resolve = false AND create_date >= current_date) al " +
+            "       ON al.site_id = CAST(s.id AS text) " +
             "WHERE ur.user_id = :userId AND r.active = true " +
             "GROUP BY r.id, r.name " +
             "ORDER BY r.name";
