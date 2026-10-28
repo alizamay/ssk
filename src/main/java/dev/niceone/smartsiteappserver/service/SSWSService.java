@@ -21,10 +21,12 @@ import dev.niceone.smartsiteappserver.utils.Debouncer;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -36,10 +38,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.LocalDateTime;
 import java.time.Month;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.List;
@@ -67,13 +72,15 @@ public class SSWSService {
                        AlarmLogRepository alarmLogRepository,
                        CabinetRepository cabinetRepository,
                        DeviceRepository deviceRepository,
-                       SiteRepository siteRepository) {
+                       SiteRepository siteRepository,
+                       @Value("${app.report.workers:8}") int reportWorkers) {
         this.activityLogRepository = activityLogRepository;
         this.alarmLogRepository = alarmLogRepository;
         this.cabinetRepository = cabinetRepository;
         this.deviceRepository = deviceRepository;
         this.siteRepository = siteRepository;
-        this.debouncer = new Debouncer(callback, 2000);
+        // Workers process different sites in parallel; keep below the DB pool size
+        this.debouncer = new Debouncer(callback, 2000, reportWorkers);
     }
 
     // Stop the debouncer thread on undeploy/redeploy so WildFly does not accumulate threads.
@@ -96,6 +103,9 @@ public class SSWSService {
 
     @Autowired
     private AlarmLogCasService alarmLogCasService;
+
+    @Autowired
+    private JdbcTemplate jdbc;
     @Autowired
     CacheManager cacheManager;
 
@@ -329,12 +339,39 @@ public class SSWSService {
             //cabinet.setOnline(true);
             cabinet.setUpdatedAt(LocalDateTime.now());
             //cabinet.getDevices().forEach();
-            cabinetRepository.saveAndFlush(cabinet);
+            saveReportedState(cabinet);
             log.debug("process end update cabinet all from board complete site update status {}", request.getSite_code());
 
         });
 
         return changed.get();
+    }
+
+    /**
+     * Writes only the columns a status report changes. saveAndFlush() on this detached cabinet
+     * was a merge: a SELECT joined with aux_device (full scan, no cabinet_id index) and an UPDATE
+     * of every column by id alone, which probes all 61 partitions. created_at is the partition
+     * key, so including it touches one partition.
+     */
+    private void saveReportedState(Cabinet cabinet) {
+        Object[] args = {
+                cabinet.getLockEventCode() == null ? null : cabinet.getLockEventCode().ordinal(),
+                cabinet.getDoorEventCode() == null ? null : cabinet.getDoorEventCode().ordinal(),
+                cabinet.getJsonDevices(), Timestamp.valueOf(cabinet.getUpdatedAt()), cabinet.getId()};
+        int[] types = {Types.INTEGER, Types.INTEGER, Types.VARCHAR, Types.TIMESTAMP, Types.BIGINT};
+        String sql = "UPDATE smartsite.cabinet SET lock_event_code = ?, door_event_code = ?, json_devices = ?, " +
+                "updated_at = ? WHERE id = ?";
+        int rows = 0;
+        if (cabinet.getCreatedAt() != null) {
+            Object[] withKey = Arrays.copyOf(args, args.length + 1);
+            withKey[args.length] = Timestamp.valueOf(cabinet.getCreatedAt());
+            int[] withKeyTypes = Arrays.copyOf(types, types.length + 1);
+            withKeyTypes[types.length] = Types.TIMESTAMP;
+            rows = jdbc.update(sql + " AND created_at = ?", withKey, withKeyTypes);
+        }
+        if (rows == 0) {
+            jdbc.update(sql, args, types);
+        }
     }
 
     // Device states without the report time (dt), which changes on every report.
@@ -392,7 +429,14 @@ public class SSWSService {
         site.setReportStatusAt(LocalDateTime.now());
 
         try {
-            siteRepository.save(site);
+            // Only the columns a report changes. save() on this detached entity was a merge:
+            // a SELECT of the site joined with all its cabinets, then an UPDATE of every column.
+            jdbc.update("UPDATE smartsite.site SET status = ?, report_status_at = ?, updated_at = ?, " +
+                            "temperature = COALESCE(?, temperature), version = COALESCE(?, version) WHERE id = ?",
+                    new Object[]{StatusCodeEnum.STATUS_UP.getId(), Timestamp.valueOf(site.getReportStatusAt()),
+                            Timestamp.valueOf(site.getReportStatusAt()), request.getSite_temperature(),
+                            request.getSite_version(), site.getId()},
+                    new int[]{Types.INTEGER, Types.TIMESTAMP, Types.TIMESTAMP, Types.DOUBLE, Types.VARCHAR, Types.BIGINT});
 
             if(checkBeforeOffline){
                 alarmLogCasService.getOrCreateAlarmLog(AlarmTypeCodeEnum.ALARM_TYPE_COMM_LOST_SERV, request.getSite_code(), null, null, LocalDateTime.now());

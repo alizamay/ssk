@@ -5,6 +5,21 @@
 --     CREATE INDEX ... ON ONLY <parent> and ALTER INDEX <parent_idx> ATTACH PARTITION <part_idx>.
 --   * Check the result with EXPLAIN (ANALYZE, BUFFERS) on the queries listed below.
 
+-- Every status report (all sites, every few seconds) looks cabinets up by code and loads a site
+-- with its cabinets by site_id. Neither column is indexed, so each lookup scans all ~68k rows in
+-- 61 partitions. Load test with 20,798 sites (2026-10-28): adding both indexes took report
+-- processing from ~177 to ~1,250 sites/min on 2 nodes.
+CREATE INDEX IF NOT EXISTS idx_cabinet_code
+    ON smartsite.cabinet (code);
+CREATE INDEX IF NOT EXISTS idx_cabinet_site_id
+    ON smartsite.cabinet (site_id);
+
+-- Loading or saving a cabinet entity joins aux_device on cabinet_id (cascade on Cabinet.aux_devices);
+-- only the primary key exists, so every cabinet save scanned all ~90k aux_device rows.
+-- Report processing no longer saves the entity, but admin pages and other jobs still do.
+CREATE INDEX IF NOT EXISTS idx_aux_device_cabinet_id
+    ON smartsite.aux_device (cabinet_id);
+
 -- SiteEventLogRepository.findFirstBySiteIdAndAlarmTypeAndCabinetIdAndCreateDateBetween
 -- (called for every alarm event in getOrCreateAlarmLog; only the PK (id, create_date) exists today)
 CREATE INDEX IF NOT EXISTS idx_site_event_log_site_type_cab_date
