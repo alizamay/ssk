@@ -167,10 +167,13 @@ public class BatchProcessingService {
             int maxBatchSize = 50;
             int minBatchSize = 5;
             
-            for (int i = 0; i < items.size(); i += dynamicBatchSize) {
+            // Advance by the batch just processed. The loop used to add the batch size after it
+            // was adjusted below, which skipped items when it grew and repeated them when it
+            // shrank: 40 of 2,936 offline sites never got a comm-lost alarm in the load test.
+            for (int i = 0, endIndex; i < items.size(); i = endIndex) {
                 long batchStartTime = System.currentTimeMillis();
                 
-                int endIndex = Math.min(i + dynamicBatchSize, items.size());
+                endIndex = Math.min(i + dynamicBatchSize, items.size());
                 List<T> batch = items.subList(i, endIndex);
                 
                 // Process batch

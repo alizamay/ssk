@@ -75,6 +75,7 @@ import java.util.*;
 import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
@@ -261,6 +262,7 @@ public class SiteScheduler {
         if (lockHeartbeat != null) {
             lockHeartbeat.shutdownNow();
         }
+        awakenExecutor.shutdownNow();
         String site_scheduler = env.getProperty("app.site_scheduler", "no").trim();
         if (site_scheduler.equals("yes")) {
             schedulerLockService.releaseLock();
@@ -944,16 +946,41 @@ public class SiteScheduler {
         }
     }
 
+    // Wakes devices of sites that went offline. Calls to an unreachable device take seconds each,
+    // so they run here, off the scheduler thread, never ahead of the comm-lost alarms.
+    private final ExecutorService awakenExecutor = Executors.newFixedThreadPool(16, r -> {
+        Thread t = new Thread(r, "awaken-" + UUID.randomUUID().toString().substring(0, 8));
+        t.setDaemon(true);
+        return t;
+    });
+
     private void ProcessSetCommunicationLostAndCallAwake(List<Site> sites){
-        // Use BatchProcessingService for better performance and monitoring
-        batchProcessingService.processSmartBatch(sites, site -> {
-            SetCreateAlarmCommunicationLost(site);
-            processCallAwakenSite(site);
-        }, "CommunicationLostAndAwake");
+        // Raise every comm-lost alarm first, then wake the devices. They used to alternate site by
+        // site on this thread (the @Async on these private methods never applied), so when many
+        // sites went offline at once the awaken timeouts held the alarms back: in the load test
+        // 16 of 2,937 alarms went out in 2.5 minutes, and the rest were raised after the sites
+        // had come back and stayed open.
+        batchProcessingService.processSmartBatch(sites, this::SetCreateAlarmCommunicationLost, "CommunicationLost");
+        for (Site site : sites) {
+            awakenExecutor.execute(() -> {
+                if (isStillDown(site)) {
+                    processCallAwakenSite(site);
+                }
+            });
+        }
     }
 
-    @Async
+    private boolean isStillDown(Site site) {
+        return siteRepository.findById(site.getId())
+                .map(s -> s.getStatus() == StatusCodeEnum.STATUS_DOWN)
+                .orElse(false);
+    }
+
     private void SetCreateAlarmCommunicationLost(Site site){
+        if (!isStillDown(site)) {
+            log.info("ProcessSetCommunicationLost {} reported again, no alarm", site.getCode());
+            return;
+        }
         List<SiteEventLog> unresolvedAlarm = alarmLogCasService.getAllByAlarmType(AlarmTypeCodeEnum.ALARM_TYPE_COMM_LOST_SERV, false,site);
         SiteEventLog existAlarm = null;
         if(unresolvedAlarm != null){
@@ -973,7 +1000,6 @@ public class SiteScheduler {
         }
     }
 
-    @Async
     private void processCallAwakenSite(Site site){
 
         try {

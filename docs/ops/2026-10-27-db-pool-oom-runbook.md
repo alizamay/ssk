@@ -71,9 +71,19 @@ app.onsite_check_log.retention_days=0
 # legacy = กลับไปใช้ตัวกัน alarm ถี่แบบเดิม (แยกต่อ node) โดยไม่ต้องเปลี่ยน WAR
 app.alarm.notify.mode=episode
 app.alarm.notify.quiet_minutes=15
+# จำนวน thread ที่ประมวลผล status report ต่อ node (เดิมมี thread เดียว) ต้องน้อยกว่า maximumPoolSize
+app.report.workers=8
+# ส่ง alarm ไป Centralized Fault ไม่เกินกี่ข้อความต่อวินาทีต่อ node ข้อความที่เกินจะเข้าคิวรอ ไม่หาย
+app.alarm.send_per_sec=100
+# ส่งไม่สำเร็จให้ลองใหม่กี่ครั้งก่อนบันทึก FAIL
+app.alarm.send_retries=3
 ```
 
 สัญญาณ "หาย" ที่รอครบเวลาจะถูกส่งจาก node ที่เป็น scheduler leader เท่านั้น ถ้าไม่มี leader สัญญาณ "หาย" จะค้างจนกว่าจะมี leader
+
+"หาย" ที่ไม่มี "เกิด" ค้างอยู่ (เช่น site กลับมา online) ส่งได้ไม่เกิน 1 ครั้งต่อ site ต่อประเภท alarm ในช่วง quiet_minutes
+
+**ก่อน deploy WAR รุ่นนี้ ให้ DBA สร้าง index ใน `docs/sql/2026-10-27-proposed-indexes.sql` อย่างน้อย 3 ตัวแรก (`cabinet.code`, `cabinet.site_id`, `aux_device.cabinet_id`)** ถ้าไม่มี index ทุก report ต้องอ่านตาราง cabinet ทั้งหมด (load test 20,798 site ประมวลผลได้แค่ ~180 site/นาที)
 
 ## 3. JVM options (`standalone.conf`)
 
