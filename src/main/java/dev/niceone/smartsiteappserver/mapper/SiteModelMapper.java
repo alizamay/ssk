@@ -289,7 +289,8 @@ public class SiteModelMapper {
 
         siteResponse.setStatus(getStatusResponse(site.getStatus()));
 
-        siteResponse.setSite_key(site.getSite_key());
+        // site_key is the emergency key. /ws/** needs no login and every subscriber receives
+        // this message, so it must never be broadcast; screens read it from the REST API.
         siteResponse.setInstalled_date(site.getInstalledDate());
         siteResponse.setIsInstall(site.getIsInstall());
         siteResponse.setUpdatedAt(site.getUpdatedAt());

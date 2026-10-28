@@ -29,7 +29,7 @@ public class Debouncer <T> {
                 int randomInterval = ThreadLocalRandom.current().nextInt(10, 2000);
                 sched.schedule(task, interval+randomInterval, TimeUnit.MILLISECONDS);
             }
-        } while (prev != null && !prev.extend()); // Exit only if new task was added to map, or existing task was extended successfully
+        } while (prev != null && !prev.extend(extra)); // Exit only if new task was added to map, or existing task was extended successfully
     }
 
     public void terminate() {
@@ -54,21 +54,23 @@ public class Debouncer <T> {
     // The task that wakes up when the wait time elapses
     private class TimerTask implements Runnable {
         private final String key;
-        private final T extra;
+        private T extra;
         private long dueTime;
         private final Object lock = new Object();
 
         public TimerTask(String key, T extra) {
             this.key = key;
             this.extra = extra;
-            extend();
+            extend(null);
         }
 
-        public boolean extend() {
+        // Keep the newest payload so a later report (e.g. door closed) is not lost to an earlier one
+        public boolean extend(T newExtra) {
             synchronized (lock) {
                 if (dueTime < 0) // Task has been shutdown
                     return false;
                 dueTime = System.currentTimeMillis() + 0; //no need extend time
+                if (newExtra != null) this.extra = newExtra;
                 return true;
             }
         }

@@ -1,6 +1,7 @@
 package dev.niceone.smartsiteappserver.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import dev.niceone.smartsiteappserver.elastic.repository.ActivityLogRepository;
@@ -42,7 +43,9 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -57,6 +60,7 @@ public class SSWSService {
     private SiteRepository siteRepository;
     private ScheduledExecutorService taskScheduler;
     private Debouncer<StatusReportRequest> debouncer;
+    private static final ObjectMapper DEVICE_JSON = new ObjectMapper();
 
     @Autowired
     public SSWSService(ActivityLogRepository activityLogRepository,
@@ -98,12 +102,20 @@ public class SSWSService {
     final Callback callback = (key, extra) -> {
         StatusReportRequest request = (StatusReportRequest) extra;
 //        System.out.println(new Date()+" Callback Task with "+key);
-        markSiteUp(request);
-        asyncReport(request);
+        Site site = siteRepository.findByCode(request.getSite_code()).orElse(null);
+        boolean siteChanged = site != null && markSiteUp(site, request);
+        boolean cabinetsChanged = _processReport(request);
+        // Sites re-report the same state every few seconds; push to web clients only when
+        // something they show has changed, or every report becomes a broadcast plus DB reads.
+        if (site != null && (siteChanged || cabinetsChanged)) {
+            wsAnnounceToInformation(site);
+        }
     };
 
     public ResponseEntity<ApiResponse> forceUpdateCabinetStatus(StatusReportRequest request) {
-        syncProcessReport(request);
+        if (_processReport(request)) {
+            siteRepository.findByCode(request.getSite_code()).ifPresent(this::wsAnnounceToInformation);
+        }
         return ResponseEntity.status(HttpStatus.OK).body(new ApiResponse(true, "UPDATE OK"));
     }
 
@@ -209,8 +221,8 @@ public class SSWSService {
         return false;
     }
 
-    @Async
-    private void _processReport(StatusReportRequest request) {
+    /** @return true when a cabinet's lock, door or device states differ from what was stored */
+    private boolean _processReport(StatusReportRequest request) {
         //        try {
 //            ObjectMapper mapper = new ObjectMapper();
 //            String jsonString = mapper.writeValueAsString(request);
@@ -224,6 +236,7 @@ public class SSWSService {
         }).collect(Collectors.toList());
         List<String> cabinetCodes = allCabinetCodes.stream().distinct().collect(Collectors.toList());
         List<Cabinet> cabinets = cabinetRepository.findByCodeIn(cabinetCodes);
+        AtomicBoolean changed = new AtomicBoolean(false);
         //Site site = siteRepository.findByCode(request.getSite_code()).get();
         //List<Device> devices = deviceRepository.findByCabinetInAndActiveIsTrue(cabinets);
 
@@ -245,9 +258,9 @@ public class SSWSService {
                 LocalDateTime finalDate = LocalDateTime.parse(lock_device.getDt(), formatter);
 
                 if (lock_device.getEvent_type_id() == EventTypeCodeEnum.EVENT_TYPE_KEY_SWITCH_LOCKED.id) {
-                    updateLockEventNew(cabinet, LockEventCodeEnum.LOCK_EVENT_LOCK, finalDate);
+                    if (updateLockEventNew(cabinet, LockEventCodeEnum.LOCK_EVENT_LOCK, finalDate)) changed.set(true);
                 } else if (lock_device.getEvent_type_id() == EventTypeCodeEnum.EVENT_TYPE_KEY_SWITCH_UNLOCKED.id) {
-                    updateLockEventNew(cabinet, LockEventCodeEnum.LOCK_EVENT_UNLOCK, finalDate);
+                    if (updateLockEventNew(cabinet, LockEventCodeEnum.LOCK_EVENT_UNLOCK, finalDate)) changed.set(true);
                 }
                 //log.info("process update lock device from board complete site update status "+request.getSite_code()+" ");
             }
@@ -262,10 +275,10 @@ public class SSWSService {
                     if(cabinet.getDoorEventCode() == DoorEventCodeEnum.DOOR_EVENT_OPEN){
                         SendResolveDoor(request, cabinet);
                     }
-                    updateDoorEventNew(cabinet, DoorEventCodeEnum.DOOR_EVENT_CLOSE, finalDate);
+                    if (updateDoorEventNew(cabinet, DoorEventCodeEnum.DOOR_EVENT_CLOSE, finalDate)) changed.set(true);
 
                 } else if (door_device.getEvent_type_id() == EventTypeCodeEnum.EVENT_TYPE_DOOR_SWITCH_OPENED.id) {
-                    updateDoorEventNew(cabinet, DoorEventCodeEnum.DOOR_EVENT_OPEN, finalDate);
+                    if (updateDoorEventNew(cabinet, DoorEventCodeEnum.DOOR_EVENT_OPEN, finalDate)) changed.set(true);
                     if(cabinet.getLockEventCode() == LockEventCodeEnum.LOCK_EVENT_LOCK) {
                         SendLog(request, cabinet);
                     }
@@ -295,6 +308,11 @@ public class SSWSService {
             //log.info("process update device all in cabinet count " + lsDevice.stream().count());
             //log.info("process update device all count " + devices.stream().count());
 
+            String oldSignature = deviceSignature(cabinet.getJsonDevices());
+            if (oldSignature == null || !oldSignature.equals(deviceSignature(reportDevice))) {
+                changed.set(true);
+            }
+
             ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
             try {
                 String json = ow.writeValueAsString(reportDevice);
@@ -309,6 +327,28 @@ public class SSWSService {
             log.debug("process end update cabinet all from board complete site update status {}", request.getSite_code());
 
         });
+
+        return changed.get();
+    }
+
+    // Device states without the report time (dt), which changes on every report.
+    private static String deviceSignature(List<ReportDeviceRequest> devices) {
+        return devices.stream()
+                .map(d -> d.getSerial() + "|" + d.getDevice_type_id() + "|" + d.getDevice_status_id() + "|" + d.getEvent_type_id())
+                .sorted()
+                .collect(Collectors.joining(","));
+    }
+
+    /** @return null when the stored JSON cannot be read, so the caller treats it as changed */
+    private static String deviceSignature(String storedJson) {
+        if (storedJson == null || storedJson.isEmpty()) {
+            return "";
+        }
+        try {
+            return deviceSignature(DEVICE_JSON.readValue(storedJson, new TypeReference<List<ReportDeviceRequest>>() {}));
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     @Async
@@ -329,24 +369,11 @@ public class SSWSService {
         }
     }
 
-    @Async
-    void asyncReport(StatusReportRequest request) {
-        _processReport(request);
-    }
-
-    void syncProcessReport(StatusReportRequest request) {
-        _processReport(request);
-    }
-
-    @Async
-    void markSiteUp(StatusReportRequest request) throws JsonProcessingException {
-        Site site = siteRepository.findByCode(request.getSite_code()).orElse(null);
-        if (site == null) {
-//            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiResponse(false, "Site not found"));
-            return;
-        }
-
+    /** @return true when the site was not up before, or reports a different version */
+    boolean markSiteUp(Site site, StatusReportRequest request) throws JsonProcessingException {
         boolean checkBeforeOffline = site.getStatus() == StatusCodeEnum.STATUS_DOWN;
+        boolean changed = site.getStatus() != StatusCodeEnum.STATUS_UP
+                || !Objects.equals(site.getVersion(), request.getSite_version());
 
         site.setStatus(StatusCodeEnum.STATUS_UP);
         site.setTemperature(request.getSite_temperature());
@@ -364,7 +391,7 @@ public class SSWSService {
         }catch (Exception ex){
             log.warn("save report status online error site {}: {}", site.getCode(), ex.getMessage());
         }
-
+        return changed;
     }
 
     @Async
