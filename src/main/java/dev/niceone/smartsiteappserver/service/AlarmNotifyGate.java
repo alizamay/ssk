@@ -86,14 +86,17 @@ public class AlarmNotifyGate {
             return false;
         }
         // Only the statement that flips is_open to true sends, so two nodes cannot both send.
-        // Also 0 when the episode is open with a newer event: held as well.
+        // Also 0 when the episode is open with a newer event: held as well. And 0 when a newer
+        // clear was already handled (another node processed the close first): this raise is
+        // stale and must not reopen an alarm that is already over.
         int opened = jdbc.update(
                 "INSERT INTO smartsite.alarm_notify_state " +
                 "(site_code, alarm_type, is_open, last_state, opened_at, last_event_at) " +
                 "VALUES (?, ?, true, 'RAISE', ?, ?) " +
                 "ON CONFLICT (site_code, alarm_type) DO UPDATE SET is_open = true, last_state = 'RAISE', " +
                 "opened_at = EXCLUDED.opened_at, last_event_at = EXCLUDED.last_event_at, closed_at = NULL " +
-                "WHERE NOT smartsite.alarm_notify_state.is_open",
+                "WHERE NOT smartsite.alarm_notify_state.is_open " +
+                "AND smartsite.alarm_notify_state.last_event_at <= EXCLUDED.last_event_at",
                 siteCode, alarmType, at, at);
         return opened > 0;
     }
@@ -106,12 +109,22 @@ public class AlarmNotifyGate {
         if (touched > 0) {
             return false;
         }
-        // Open with a newer raise: this clear is stale. Not open at all (e.g. raised before this
-        // version): send the clear now so the alarm does not stay stuck in Centralized Fault.
-        List<Boolean> open = jdbc.queryForList(
-                "SELECT is_open FROM smartsite.alarm_notify_state WHERE site_code = ? AND alarm_type = ?",
-                Boolean.class, siteCode, alarmType);
-        return open.isEmpty() || !open.get(0);
+        // No open episode (e.g. raised before this version): send the clear now so the alarm does
+        // not stay stuck in Centralized Fault, but at most once per quiet period. Every site that
+        // comes back up sends a comm-lost clear; without this a site going down and up repeatedly
+        // sent one each time (60k clears for 20k sites in the load test). A clear that was lost
+        // is still sent again after the quiet period.
+        // Open with a newer raise: the WHERE fails and this stale clear is held.
+        int sent = jdbc.update(
+                "INSERT INTO smartsite.alarm_notify_state " +
+                "(site_code, alarm_type, is_open, last_state, last_event_at, closed_at) " +
+                "VALUES (?, ?, false, 'CLEAR', ?, now()) " +
+                "ON CONFLICT (site_code, alarm_type) DO UPDATE SET last_state = 'CLEAR', " +
+                "last_event_at = EXCLUDED.last_event_at, closed_at = now() " +
+                "WHERE NOT smartsite.alarm_notify_state.is_open " +
+                "AND COALESCE(smartsite.alarm_notify_state.closed_at, '-infinity') < now() - (? * interval '1 minute')",
+                siteCode, alarmType, at, quietMinutes);
+        return sent > 0;
     }
 
     /**

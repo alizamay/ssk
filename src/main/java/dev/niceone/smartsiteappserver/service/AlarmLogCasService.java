@@ -30,11 +30,6 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.SocketAddress;
-import java.net.UnknownHostException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -80,6 +75,9 @@ public class AlarmLogCasService {
     private AlarmNotifyGate alarmNotifyGate;
 
     @Autowired
+    private AlarmTcpSender alarmTcpSender;
+
+    @Autowired
     public AlarmLogCasService(UserRepository userRepository,SiteRepository siteRepository,CabinetRepository cabinetRepository,RegionRepository regionRepository) {
         this.userRepository = userRepository;
         this.siteRepository = siteRepository;
@@ -106,6 +104,12 @@ public class AlarmLogCasService {
         // Taken in the caller's order; the work below finishes later on another thread
         LocalDateTime eventAt = resolveDate != null ? resolveDate : LocalDateTime.now();
         String queueKey = siteCode + ":" + alarmType.getId();
+        // Decide here, in the caller's order, not when the queued work runs: in the load test the
+        // queue lagged more than 30 s, so a door close handled on another node reached the gate
+        // before this node's open and the clear went out ahead of its raise.
+        boolean isClear = resolveDate != null;
+        boolean shouldSend = Arrays.asList(reportTypes).contains(alarmType)
+                && alarmNotifyGate.shouldSend(siteCode, alarmType.getId(), isClear, eventAt);
 
         Supplier<LogEntry> work = () -> {
             LogEntry alarmLog = null;
@@ -148,32 +152,22 @@ public class AlarmLogCasService {
                 try {
                     //addLog(newLog);
                     siteEventLogService.addEventLog(newLog);
-
-
-                    if (Arrays.asList(reportTypes).contains(AlarmTypeCodeEnum.getById(alarmType.getId()))){
-                        // Check throttling before sending to prevent alarm flooding
-                        boolean isClear = (newLog.getResolve_date() != null);
-                        boolean shouldSend = alarmNotifyGate.shouldSend(
-                            newLog.getSite_code(),
-                            alarmType.getId(),
-                            isClear,
-                            eventAt
-                        );
-
-                        if (shouldSend) {
-                            String msgAlarm = tcpAlarmPayload(newLog);
-                            AuthinLogDto aDto = new AuthinLogDto();
-                            aDto.setSiteCode(newLog.getSite_code());
-                            aDto.setIsClear(isClear);
-                            sendTcpAlarm(msgAlarm, aDto);
-                        } else {
-                            log.debug("Alarm throttled for site {} alarm type {} (flapping detected)",
-                                newLog.getSite_code(), alarmType.getId());
-                        }
-                    }
-
                 } catch (Exception e) {
-                    throw new RuntimeException(e);
+                    // The gate already counted this raise as sent: send it even if the log failed
+                    log.warn("alarm event log failed for {}: {}", queueKey, e.getMessage());
+                }
+                if (shouldSend) {
+                    try {
+                        String msgAlarm = tcpAlarmPayload(newLog);
+                        AuthinLogDto aDto = new AuthinLogDto();
+                        aDto.setSiteCode(newLog.getSite_code());
+                        aDto.setIsClear(false);
+                        sendTcpAlarm(msgAlarm, aDto);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                } else {
+                    log.debug("Alarm held by gate for site {} alarm type {}", siteCode, alarmType.getId());
                 }
             }else{
 
@@ -184,29 +178,21 @@ public class AlarmLogCasService {
                 try {
                     //updateLogResolve(updateLog);
                     siteEventLogService.resolveEventUnCabinet(updateLog);
-                    if (Arrays.asList(reportTypes).contains(AlarmTypeCodeEnum.getById(alarmType.getId()))){
-                        // Check throttling before sending to prevent alarm flooding
-                        boolean isClear = (updateLog.getResolve_date() != null);
-                        boolean shouldSend = alarmNotifyGate.shouldSend(
-                            updateLog.getSite_code(),
-                            alarmType.getId(),
-                            isClear,
-                            eventAt
-                        );
-
-                        if (shouldSend) {
-                            String msgAlarm = tcpAlarmPayloadUpdate(updateLog);
-                            AuthinLogDto aDto = new AuthinLogDto();
-                            aDto.setSiteCode(updateLog.getSite_code());
-                            aDto.setIsClear(isClear);
-                            sendTcpAlarm(msgAlarm, aDto);
-                        } else {
-                            log.debug("Alarm throttled for site {} alarm type {} (flapping detected)",
-                                updateLog.getSite_code(), alarmType.getId());
-                        }
-                    }
                 } catch (Exception e) {
-                    throw new RuntimeException(e);
+                    log.warn("alarm event resolve failed for {}: {}", queueKey, e.getMessage());
+                }
+                if (shouldSend) {
+                    try {
+                        String msgAlarm = tcpAlarmPayloadUpdate(updateLog);
+                        AuthinLogDto aDto = new AuthinLogDto();
+                        aDto.setSiteCode(updateLog.getSite_code());
+                        aDto.setIsClear(true);
+                        sendTcpAlarm(msgAlarm, aDto);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                } else {
+                    log.debug("Alarm held by gate for site {} alarm type {}", siteCode, alarmType.getId());
                 }
             }
 
@@ -913,34 +899,9 @@ public class AlarmLogCasService {
         }
     }
 
-    @Async
+    /** Queues the message; {@link AlarmTcpSender} sends it in order at a capped rate, with retries. */
     public void sendTcpAlarm(String alarm, AuthinLogDto authinLogDto) {
-        log.debug("Execute method sendTcpAlarm. {}", Thread.currentThread().getName());
-        String alarm_ip = env.getProperty("app.alarm_ip");
-        String alarm_port = env.getProperty("app.alarm_port");
-
-        log.debug("sendTcpAlarm {} {}", alarm_ip, alarm_port);
-        log.info(alarm);
-        authinLogDto.setUrl(alarm_ip+":" + alarm_port);
-        SocketAddress sockAddr = new InetSocketAddress(alarm_ip, Integer.parseInt(alarm_port));
-        // try-with-resources: the socket was leaked (open fd) whenever connect() failed
-        try (Socket socket = new Socket()) {
-            socket.connect(sockAddr, 5000);
-            socket.setSoTimeout(5000);
-            PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
-            writer.print(alarm);
-            writer.flush();
-            authinLogDto.setMessage(alarm + ",[SUCCESS]");
-        } catch (UnknownHostException ex) {
-            log.error("sendTcpAlarm Server not found: " + ex.getMessage());
-            authinLogDto.setMessage(alarm + ",[FAIL:sendTcpAlarm Server not found "+ex.getMessage()+"]");
-        } catch (IOException e) {
-            log.error("sendTcpAlarm I/O error: " + e.getMessage());
-            authinLogDto.setMessage(alarm + ",[FAIL:sendTcpAlarm I/O error "+e.getMessage()+"]");
-        }
-
-        //authinService.postLog(authinLogDto);
-        authinService.insertLog(authinLogDto.getSiteCode(), authinLogDto.getUrl(), authinLogDto.getMessage(), authinLogDto.getIsClear());
+        alarmTcpSender.send(alarm, authinLogDto);
     }
 
 

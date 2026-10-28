@@ -8,8 +8,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -29,7 +27,7 @@ class AlarmNotifyGateTest {
     private static final String RAISE_OPEN = "UPDATE smartsite.alarm_notify_state SET last_state = 'RAISE'";
     private static final String CLEAR_OPEN = "UPDATE smartsite.alarm_notify_state SET last_state = 'CLEAR'";
     private static final String OPEN_EPISODE = "INSERT INTO smartsite.alarm_notify_state";
-    private static final String IS_OPEN = "SELECT is_open FROM smartsite.alarm_notify_state";
+    private static final String CLEAR_UNOPENED = "INSERT INTO smartsite.alarm_notify_state (site_code, alarm_type, is_open, last_state, last_event_at, closed_at)";
     private static final LocalDateTime AT = LocalDateTime.of(2026, 10, 28, 9, 0);
 
     private JdbcTemplate jdbc;
@@ -53,9 +51,8 @@ class AlarmNotifyGateTest {
         when(jdbc.update(startsWith(OPEN_EPISODE), eq("NSRKK"), eq(9), any(Timestamp.class), any(Timestamp.class))).thenReturn(rows);
     }
 
-    private void storedOpen(Boolean... isOpen) {
-        when(jdbc.queryForList(startsWith(IS_OPEN), eq(Boolean.class), eq("NSRKK"), eq(9)))
-                .thenReturn(isOpen.length == 0 ? Collections.emptyList() : Arrays.asList(isOpen));
+    private void clearUnopened(int rows) {
+        when(jdbc.update(startsWith(CLEAR_UNOPENED), eq("NSRKK"), eq(9), any(Timestamp.class), eq(15))).thenReturn(rows);
     }
 
     @Test
@@ -90,27 +87,20 @@ class AlarmNotifyGateTest {
     }
 
     @Test
-    void clearOlderThanTheEpisodesLastRaiseIsHeld() {
+    void clearWithoutOpenEpisodeIsSentNow() {
         touchOpen(CLEAR_OPEN, 0);
-        storedOpen(true);
+        clearUnopened(1);
+
+        assertTrue(gate.shouldSend("NSRKK", 9, true, AT));
+    }
+
+    @Test
+    void clearAlreadySentWithinQuietPeriodIsHeld() {
+        // Also the result for a clear older than the open episode's last raise
+        touchOpen(CLEAR_OPEN, 0);
+        clearUnopened(0);
 
         assertFalse(gate.shouldSend("NSRKK", 9, true, AT));
-    }
-
-    @Test
-    void clearWithoutEpisodeIsSentNow() {
-        touchOpen(CLEAR_OPEN, 0);
-        storedOpen();
-
-        assertTrue(gate.shouldSend("NSRKK", 9, true, AT));
-    }
-
-    @Test
-    void clearAfterEpisodeClosedIsSentNow() {
-        touchOpen(CLEAR_OPEN, 0);
-        storedOpen(false);
-
-        assertTrue(gate.shouldSend("NSRKK", 9, true, AT));
     }
 
     @Test
