@@ -23,6 +23,7 @@ WAR ที่รันอยู่บน prod **เก่ากว่าโค�
    ผลรวมของ `maximumPoolSize` ทุก node + connection ของเครื่องมืออื่น ต้องน้อยกว่าค่านี้ (เว้นไว้อย่างน้อย 10%)
 2. ตรวจ limit ของ user ที่รัน WildFly: `ulimit -u` (max user processes) ควร ≥ 4096
 3. ตรวจ heap ปัจจุบันใน `standalone.conf`: `-Xms` / `-Xmx`
+4. build WAR ด้วย `./mvnw clean package` ทุกครั้ง ถ้าไม่ `clean` ไฟล์ `.class` ของคลาสที่ลบไปแล้ว (เช่น `HighThroughputStatusService`) จะค้างใน `target/classes` และติดไปกับ WAR
 
 ## 2. ค่าที่ต้องใส่ในไฟล์ properties ของแต่ละ node
 
