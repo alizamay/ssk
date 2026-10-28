@@ -66,7 +66,14 @@ app.security.authin_public=no
 app.onsite_check_log.min_interval_sec=300
 # ลบ onsite_check_log ที่เก่ากว่า N วัน ทุกวัน 03:40 บน leader (0 = ไม่ลบ; ต้องตกลงระยะเวลาเก็บก่อน)
 app.onsite_check_log.retention_days=0
+# การส่ง alarm ไป Centralized Fault: episode = ทุก node ใช้สถานะร่วมกันในตาราง smartsite.alarm_notify_state
+# (สร้างเองตอน start) ส่ง "เกิด" ครั้งแรก 1 ครั้ง และ "หาย" 1 ครั้งเมื่อเงียบครบ quiet_minutes
+# legacy = กลับไปใช้ตัวกัน alarm ถี่แบบเดิม (แยกต่อ node) โดยไม่ต้องเปลี่ยน WAR
+app.alarm.notify.mode=episode
+app.alarm.notify.quiet_minutes=15
 ```
+
+สัญญาณ "หาย" ที่รอครบเวลาจะถูกส่งจาก node ที่เป็น scheduler leader เท่านั้น ถ้าไม่มี leader สัญญาณ "หาย" จะค้างจนกว่าจะมี leader
 
 ## 3. JVM options (`standalone.conf`)
 

@@ -253,15 +253,17 @@ public class SSWSService {
 
             ReportDeviceRequest lock_device = deviceReqs.stream().filter(d -> d.getDevice_type_id() == DeviceTypeCodeOld.KEY_SWITCH.id).findFirst().orElse(null);
 
+            boolean lockChanged = false;
             if(lock_device != null){
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
                 LocalDateTime finalDate = LocalDateTime.parse(lock_device.getDt(), formatter);
 
                 if (lock_device.getEvent_type_id() == EventTypeCodeEnum.EVENT_TYPE_KEY_SWITCH_LOCKED.id) {
-                    if (updateLockEventNew(cabinet, LockEventCodeEnum.LOCK_EVENT_LOCK, finalDate)) changed.set(true);
+                    lockChanged = updateLockEventNew(cabinet, LockEventCodeEnum.LOCK_EVENT_LOCK, finalDate);
                 } else if (lock_device.getEvent_type_id() == EventTypeCodeEnum.EVENT_TYPE_KEY_SWITCH_UNLOCKED.id) {
-                    if (updateLockEventNew(cabinet, LockEventCodeEnum.LOCK_EVENT_UNLOCK, finalDate)) changed.set(true);
+                    lockChanged = updateLockEventNew(cabinet, LockEventCodeEnum.LOCK_EVENT_UNLOCK, finalDate);
                 }
+                if (lockChanged) changed.set(true);
                 //log.info("process update lock device from board complete site update status "+request.getSite_code()+" ");
             }
 
@@ -278,8 +280,12 @@ public class SSWSService {
                     if (updateDoorEventNew(cabinet, DoorEventCodeEnum.DOOR_EVENT_CLOSE, finalDate)) changed.set(true);
 
                 } else if (door_device.getEvent_type_id() == EventTypeCodeEnum.EVENT_TYPE_DOOR_SWITCH_OPENED.id) {
-                    if (updateDoorEventNew(cabinet, DoorEventCodeEnum.DOOR_EVENT_OPEN, finalDate)) changed.set(true);
-                    if(cabinet.getLockEventCode() == LockEventCodeEnum.LOCK_EVENT_LOCK) {
+                    boolean doorChanged = updateDoorEventNew(cabinet, DoorEventCodeEnum.DOOR_EVENT_OPEN, finalDate);
+                    if (doorChanged) changed.set(true);
+                    // Raise only when this report moved the cabinet into "open while locked".
+                    // Boards repeat the same state every few seconds, and each repeat used to
+                    // write another unauthorized-open event and send another alarm.
+                    if ((doorChanged || lockChanged) && cabinet.getLockEventCode() == LockEventCodeEnum.LOCK_EVENT_LOCK) {
                         SendLog(request, cabinet);
                     }
 //
@@ -373,11 +379,16 @@ public class SSWSService {
     boolean markSiteUp(Site site, StatusReportRequest request) throws JsonProcessingException {
         boolean checkBeforeOffline = site.getStatus() == StatusCodeEnum.STATUS_DOWN;
         boolean changed = site.getStatus() != StatusCodeEnum.STATUS_UP
-                || !Objects.equals(site.getVersion(), request.getSite_version());
+                || (request.getSite_version() != null && !Objects.equals(site.getVersion(), request.getSite_version()));
 
         site.setStatus(StatusCodeEnum.STATUS_UP);
-        site.setTemperature(request.getSite_temperature());
-        site.setVersion(request.getSite_version());
+        // Some boards omit these fields; keep the last known value instead of wiping it
+        if (request.getSite_temperature() != null) {
+            site.setTemperature(request.getSite_temperature());
+        }
+        if (request.getSite_version() != null) {
+            site.setVersion(request.getSite_version());
+        }
         site.setReportStatusAt(LocalDateTime.now());
 
         try {

@@ -41,6 +41,8 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @EnableAsync
@@ -75,7 +77,7 @@ public class AlarmLogCasService {
     private TtsmWebhookService ttsmWebhookService;
 
     @Autowired
-    private AlarmThrottleService alarmThrottleService;
+    private AlarmNotifyGate alarmNotifyGate;
 
     @Autowired
     public AlarmLogCasService(UserRepository userRepository,SiteRepository siteRepository,CabinetRepository cabinetRepository,RegionRepository regionRepository) {
@@ -95,11 +97,17 @@ public class AlarmLogCasService {
             AlarmTypeCodeEnum.ALARM_TYPE_COMM_LOST_PI,
             AlarmTypeCodeEnum.ALARM_TYPE_SLAVE_DOWN
     };
-    @Async
-    public void getOrCreateAlarmLog(AlarmTypeCodeEnum alarmType, String siteCode, Cabinet cabinet, Device device, LocalDateTime resolveDate) throws JsonProcessingException {
+    // Raises and clears of one site and alarm type run one after another, in call order. They
+    // used to run concurrently, so a clear could finish first and then be overwritten by the
+    // raise before it: site_event_log stayed unresolved and Centralized Fault was never cleared.
+    private final ConcurrentHashMap<String, CompletableFuture<?>> alarmQueues = new ConcurrentHashMap<>();
 
-        CompletableFuture.supplyAsync(() -> {
-            // Your synchronous logic goes here
+    public void getOrCreateAlarmLog(AlarmTypeCodeEnum alarmType, String siteCode, Cabinet cabinet, Device device, LocalDateTime resolveDate) throws JsonProcessingException {
+        // Taken in the caller's order; the work below finishes later on another thread
+        LocalDateTime eventAt = resolveDate != null ? resolveDate : LocalDateTime.now();
+        String queueKey = siteCode + ":" + alarmType.getId();
+
+        Supplier<LogEntry> work = () -> {
             LogEntry alarmLog = null;
             Site site = siteRepository.findByCodeWithRegion(siteCode).orElse(null);
 
@@ -145,10 +153,11 @@ public class AlarmLogCasService {
                     if (Arrays.asList(reportTypes).contains(AlarmTypeCodeEnum.getById(alarmType.getId()))){
                         // Check throttling before sending to prevent alarm flooding
                         boolean isClear = (newLog.getResolve_date() != null);
-                        boolean shouldSend = alarmThrottleService.shouldSendAlarm(
+                        boolean shouldSend = alarmNotifyGate.shouldSend(
                             newLog.getSite_code(),
                             alarmType.getId(),
-                            isClear
+                            isClear,
+                            eventAt
                         );
 
                         if (shouldSend) {
@@ -178,10 +187,11 @@ public class AlarmLogCasService {
                     if (Arrays.asList(reportTypes).contains(AlarmTypeCodeEnum.getById(alarmType.getId()))){
                         // Check throttling before sending to prevent alarm flooding
                         boolean isClear = (updateLog.getResolve_date() != null);
-                        boolean shouldSend = alarmThrottleService.shouldSendAlarm(
+                        boolean shouldSend = alarmNotifyGate.shouldSend(
                             updateLog.getSite_code(),
                             alarmType.getId(),
-                            isClear
+                            isClear,
+                            eventAt
                         );
 
                         if (shouldSend) {
@@ -202,7 +212,16 @@ public class AlarmLogCasService {
 
 
             return alarmLog;
+        };
 
+        CompletableFuture<?> next = alarmQueues.compute(queueKey, (k, prev) ->
+                (prev == null ? CompletableFuture.completedFuture(null) : prev)
+                        .handleAsync((r, ex) -> work.get()));
+        next.whenComplete((r, ex) -> {
+            if (ex != null) {
+                log.warn("alarm event {} failed: {}", queueKey, ex.getMessage());
+            }
+            alarmQueues.remove(queueKey, next);
         });
     }
 
@@ -634,10 +653,11 @@ public class AlarmLogCasService {
                 if (Arrays.asList(reportTypes).contains(AlarmTypeCodeEnum.getById(alarmType.getId()))){
                     // Check throttling before sending to prevent alarm flooding
                     boolean isClear = (alarmLog.getResolve_date() != null);
-                    boolean shouldSend = alarmThrottleService.shouldSendAlarm(
+                    boolean shouldSend = alarmNotifyGate.shouldSend(
                         site.getCode(),
                         alarmType.getId(),
-                        isClear
+                        isClear,
+                        LocalDateTime.now()
                     );
 
                     if (shouldSend) {
@@ -714,10 +734,11 @@ public class AlarmLogCasService {
                 if (Arrays.asList(reportTypes).contains(AlarmTypeCodeEnum.getById(alarmType.getId()))){
                     // Check throttling before sending to prevent alarm flooding
                     boolean isClear = (newLog.getResolve_date() != null);
-                    boolean shouldSend = alarmThrottleService.shouldSendAlarm(
+                    boolean shouldSend = alarmNotifyGate.shouldSend(
                         site.getCode(),
                         alarmType.getId(),
-                        isClear
+                        isClear,
+                        LocalDateTime.now()
                     );
 
                     if (shouldSend) {
@@ -873,6 +894,24 @@ public class AlarmLogCasService {
         return str;
     }
 
+
+    /** Sends the held clear of each alarm episode that has been quiet long enough (see AlarmNotifyGate). */
+    public void sendDueClears() {
+        for (AlarmNotifyGate.Episode episode : alarmNotifyGate.closeQuietEpisodes()) {
+            try {
+                LogUpdateAlarm clear = new LogUpdateAlarm();
+                clear.setAlarm_type(episode.alarmType);
+                clear.setSite_code(episode.siteCode);
+                clear.setResolve_date(episode.lastEventAt);
+                AuthinLogDto aDto = new AuthinLogDto();
+                aDto.setSiteCode(episode.siteCode);
+                aDto.setIsClear(true);
+                sendTcpAlarm(tcpAlarmPayloadUpdate(clear), aDto);
+            } catch (Exception e) {
+                log.warn("sending held clear failed {}:{} - {}", episode.siteCode, episode.alarmType, e.getMessage());
+            }
+        }
+    }
 
     @Async
     public void sendTcpAlarm(String alarm, AuthinLogDto authinLogDto) {

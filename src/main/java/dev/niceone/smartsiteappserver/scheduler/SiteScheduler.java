@@ -920,19 +920,28 @@ public class SiteScheduler {
     /**
      * Cleanup old alarm trackers to prevent memory leaks
      * Runs every hour to remove stale trackers (> 1 hour old)
+     * Trackers live in each node's memory (app.alarm.notify.mode=legacy), so every node cleans its own.
      */
     @Scheduled(cron = "0 0 * * * *") // Every hour at minute 0
     public void cleanupAlarmTrackers() {
-        String site_scheduler = env.getProperty("app.site_scheduler");
-        site_scheduler = site_scheduler.trim();
-        if (site_scheduler.equals("no")) {
-            return;
-        }
-        if (!schedulerLockService.isLeader()) return;
-
         log.info("Starting alarm tracker cleanup");
         alarmThrottleService.cleanupOldTrackers();
         log.info("Alarm tracker cleanup completed");
+    }
+
+    /** Sends the held clear of alarm episodes that have been quiet long enough (AlarmNotifyGate). */
+    @Scheduled(cron = "30 * * * * *")
+    public void sendDueAlarmClears() {
+        String site_scheduler = env.getProperty("app.site_scheduler");
+        if (site_scheduler == null || site_scheduler.trim().equals("no")) {
+            return;
+        }
+        if (!schedulerLockService.isLeader()) return;
+        try {
+            alarmLogCasService.sendDueClears();
+        } catch (Exception e) {
+            log.warn("sendDueAlarmClears failed: {}", e.getMessage());
+        }
     }
 
     private void ProcessSetCommunicationLostAndCallAwake(List<Site> sites){

@@ -8,6 +8,9 @@ import javax.persistence.PersistenceContext;
 import javax.persistence.Query;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SiteEventResolveHistoryRepositoryImpl implements SiteEventResolveHistoryRepositoryCustom {
 
@@ -25,7 +28,26 @@ public class SiteEventResolveHistoryRepositoryImpl implements SiteEventResolveHi
         return null;
     }
 
+    // Called on every resolve event. Run the DDL once per day per node, and never against a
+    // table that is not partitioned (a failed DDL aborts the caller's transaction, losing the
+    // resolve and its clear message).
+    private final Set<LocalDate> ensuredDates = ConcurrentHashMap.newKeySet();
+    private volatile Boolean parentPartitioned;
+
     public void ensurePartitionFor(LocalDate date) {
+        if (ensuredDates.contains(date)) {
+            return;
+        }
+        if (parentPartitioned == null) {
+            List<String> kind = jdbcTemplate.queryForList(
+                    "SELECT c.relkind::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
+                    "WHERE n.nspname = 'smartsite' AND c.relname = 'site_event_resolve_history'", String.class);
+            parentPartitioned = !kind.isEmpty() && "p".equals(kind.get(0));
+        }
+        if (!parentPartitioned) {
+            ensuredDates.add(date);
+            return;
+        }
         String partitionName = String.format("site_event_resolve_history_%s",
                 date.format(DateTimeFormatter.ofPattern("yyyy_MM_dd")));
 
@@ -40,5 +62,6 @@ public class SiteEventResolveHistoryRepositoryImpl implements SiteEventResolveHi
         );
 
         jdbcTemplate.execute(sql);
+        ensuredDates.add(date);
     }
 }
