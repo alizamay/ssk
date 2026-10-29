@@ -71,7 +71,8 @@ app.onsite_check_log.retention_days=0
 # legacy = กลับไปใช้ตัวกัน alarm ถี่แบบเดิม (แยกต่อ node) โดยไม่ต้องเปลี่ยน WAR
 app.alarm.notify.mode=episode
 app.alarm.notify.quiet_minutes=15
-# จำนวน thread ที่ประมวลผล status report ต่อ node (เดิมมี thread เดียว) ต้องน้อยกว่า maximumPoolSize
+# จำนวน thread ที่ประมวลผล status report ต่อ node (เดิมมี thread เดียว) ไม่ควรเกินครึ่งของ maximumPoolSize
+# node ที่ pool = 15-20 ใช้ 8 ได้ (ค่าที่ load test), node ที่ pool = 8 ให้ใช้ 4
 app.report.workers=8
 # ส่ง alarm ไป Centralized Fault ไม่เกินกี่ข้อความต่อวินาทีต่อ node ข้อความที่เกินจะเข้าคิวรอ ไม่หาย
 app.alarm.send_per_sec=100
